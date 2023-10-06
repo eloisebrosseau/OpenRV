@@ -45,3 +45,6 @@ SET_PROPERTY(
   CACHE RV_C_STANDARD
   PROPERTY STRINGS C99 11 17
 )
+
+# Optional build options
+OPTION(RV_BUILD_OUTPUT_PLUGIN_NDI "Add the NDI video output plugin to the build." ON)
