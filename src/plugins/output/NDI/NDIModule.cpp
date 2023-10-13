@@ -29,14 +29,12 @@ NDIModule::~NDIModule()
     close();
 }
 
-std::string 
-NDIModule::name() const
+std::string NDIModule::name() const
 {
-    return "NDI";
+    return "NDI_MODULE";
 }
 
-std::string 
-NDIModule::SDKIdentifier() const
+std::string NDIModule::SDKIdentifier() const
 {
     std::ostringstream str;
     str << "NDI SDK Version " << NDIlib_version();
@@ -52,27 +50,28 @@ NDIModule::SDKInfo() const
 void 
 NDIModule::open()
 {
-    if (isOpen()) return;
+    if (isOpen())
+    {
+        return;
+    }
 
     if (!NDIlib_initialize())
     {   
         return;
     }
 
-    NDIVideoDevice* device = new NDIVideoDevice(this, "NDI");
+    NDIVideoDevice* device = new NDIVideoDevice(this, "NDI_VIDEO_DEVICE");
     if (device->numVideoFormats()!=0)
     {
         m_devices.push_back(device); 
-    }
-    else
+    } else
     {
         delete device;
         device = nullptr;
     }
 }
 
-void 
-NDIModule::close()
+void NDIModule::close()
 {
     for (size_t i = 0; i < m_devices.size(); i++)
     {
@@ -83,8 +82,7 @@ NDIModule::close()
     NDIlib_destroy();
 }
 
-bool 
-NDIModule::isOpen() const
+bool NDIModule::isOpen() const
 {
     return !m_devices.empty();
 }
