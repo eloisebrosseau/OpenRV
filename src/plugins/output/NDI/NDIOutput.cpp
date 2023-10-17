@@ -14,20 +14,18 @@ extern "C"
     __declspec( dllexport ) void output_module_destroy( TwkApp::VideoModule* );
 #endif
 
-    TwkApp::VideoModule* output_module_create(float output_plugin_version, int output_module_index)
+    TwkApp::VideoModule* output_module_create(float, int output_module_index)
     {
-    try
-    {
-        if (output_module_index == 0)
+        try
         {
-        return new NDI::NDIModule( 0 );
-        }
-    } catch( ... )
-    {
-    }
+            if (output_module_index == 0)
+            {
+                return new NDI::NDIModule();
+            }
+        } catch(...) {}
 
-    return nullptr;
-  }
+        return nullptr;
+    }
 
     void output_module_destroy(TwkApp::VideoModule* output_module)
     {

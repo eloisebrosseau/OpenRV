@@ -4,7 +4,8 @@
 // SPDX-License-Identifier: Apache-2.0 
 //
 
-#pragma once
+#ifndef __NDI__NDIModule__h__
+#define __NDI__NDIModule__h__
 
 #include "TwkApp/VideoModule.h"
 
@@ -15,15 +16,17 @@ namespace NDI {
 class NDIModule : public TwkApp::VideoModule
 {
     public:
-        NDIModule(NativeDisplayPtr);
-        virtual ~NDIModule();
+        NDIModule();
+        virtual ~NDIModule() override;
 
-        virtual std::string name() const;
-        virtual std::string SDKIdentifier() const;
-        virtual std::string SDKInfo() const;
-        virtual void open();
-        virtual void close();
-        virtual bool isOpen() const;
+        virtual std::string name() const override;
+        virtual std::string SDKIdentifier() const override;
+        virtual std::string SDKInfo() const override;
+        virtual void open() override;
+        virtual void close() override;
+        virtual bool isOpen() const override;
 };
 
 } // NDI
+
+#endif  // __NDI__NDIModule__h__

@@ -13,8 +13,7 @@
 
 namespace NDI {
 
-NDIModule::NDIModule(NativeDisplayPtr p) 
-  : VideoModule()
+NDIModule::NDIModule() : VideoModule()
 {
     open();
 
@@ -31,7 +30,7 @@ NDIModule::~NDIModule()
 
 std::string NDIModule::name() const
 {
-    return "NDI_MODULE";
+    return "NDIModule";
 }
 
 std::string NDIModule::SDKIdentifier() const
@@ -41,14 +40,12 @@ std::string NDIModule::SDKIdentifier() const
     return str.str();
 }
 
-std::string 
-NDIModule::SDKInfo() const
+std::string NDIModule::SDKInfo() const
 {
     return "";
 }
 
-void 
-NDIModule::open()
+void NDIModule::open()
 {
     if (isOpen())
     {
@@ -60,11 +57,12 @@ NDIModule::open()
         return;
     }
 
-    NDIVideoDevice* device = new NDIVideoDevice(this, "NDI_VIDEO_DEVICE");
-    if (device->numVideoFormats()!=0)
+    NDIVideoDevice* device = new NDIVideoDevice(this, "NDIVideoDevice");
+    if (device->numVideoFormats() != 0)
     {
         m_devices.push_back(device); 
-    } else
+    }
+    else
     {
         delete device;
         device = nullptr;
@@ -73,9 +71,8 @@ NDIModule::open()
 
 void NDIModule::close()
 {
-    for (size_t i = 0; i < m_devices.size(); i++)
-    {
-        delete m_devices[i];
+    for (const auto& device : m_devices) {
+        delete device;
     }
     m_devices.clear();
 

@@ -65,22 +65,22 @@ void
 Application::loadOutputPlugins(const std::string& envvar)
 {
     m_outputPlugins.loadPlugins(envvar);
-    for (auto outputPlugin : m_outputPlugins.plugins())
+    for (const auto& outputPlugin : m_outputPlugins.plugins())
     {
         int moduleIndex = 0;
         TwkApp::VideoModule* outputModule = nullptr;
         do 
         {
             outputModule = outputPlugin->output_module_create(OUTPUT_PLUGIN_VERSION, moduleIndex++);
-            if (outputModule)
+            if (outputModule != nullptr)
             {
                 addVideoModule(outputModule);
-                for (auto d : outputModule->devices())
+                for (const auto& d : outputModule->devices())
                 {
                     std::cout << "INFO: " << outputModule->name() << " found " << d->name() << std::endl;
                 }
             }
-        } while (outputModule!=nullptr);
+        } while (outputModule != nullptr);
     }
 }
 
