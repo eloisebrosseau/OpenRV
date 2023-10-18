@@ -20,9 +20,9 @@ using namespace boost;
 
 VideoDevice::VideoDevice(VideoModule* module, const string& name, unsigned int caps)
     : EventNode(name.c_str()),
-      m_module(module),
       m_name(name),
       m_capabilities(caps),
+      m_module(module),
       m_displayMode(IndependentDisplayMode),
       m_useAudioOutput(false),
       m_useTimecodeOutput(false),

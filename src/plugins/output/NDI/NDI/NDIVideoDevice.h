@@ -47,11 +47,7 @@
 namespace NDI {
     class NDIModule;
 
-    typedef boost::mutex::scoped_lock ScopedLock;
-    typedef boost::mutex              Mutex;
-    typedef boost::condition_variable Condition;
     typedef unsigned char             NDIVideoFrame;
-    typedef unsigned char             NDIAudioFrame;
 
     struct NDIDataFormat
     {
@@ -85,14 +81,10 @@ namespace NDI {
     typedef std::vector<NDIDataFormat>  NDIDataFormatVector;
 
     class NDIVideoDevice : public TwkGLF::GLBindableVideoDevice {
-        friend class PinnedMemoryAllocator;
         public:
             typedef TwkUtil::Timer                          Timer;
             typedef TwkGLF::GLFence                         GLFence;
             typedef TwkGLF::GLFBO                           GLFBO;
-            typedef std::vector<unsigned char*>             BufferVector;
-            typedef stl_ext::thread_group                   ThreadGroup;
-            typedef std::vector<int>                        AudioBuffer;
             typedef std::deque<NDIVideoFrame*>              DLVideoFrameDeque;
 
             struct PBOData
@@ -108,21 +100,12 @@ namespace NDI {
                 void unlockState();
 
                 GLuint          globject;
-                void*           mappedPointer;
                 State           state;
-                GLFence*        fence;
                 const GLFBO*    fbo;
 
             private:
                 pthread_mutex_t mutex;
                 pthread_mutex_t stateMutex;
-            };
-            struct FrameData
-            {
-                FrameData(): audioData(nullptr), videoFrame(nullptr) {}
-                ~FrameData() {}
-                void* audioData;
-                void* videoFrame;
             };
 
             typedef std::deque<PBOData*> PBOQueue;
@@ -171,9 +154,7 @@ namespace NDI {
             virtual void open(const StringVector& args) override;
             virtual void close() override;
             virtual bool isOpen() const override;
-            virtual void makeCurrent() const;
             virtual void clearCaches() const override;
-            virtual void syncBuffers() const override;
             virtual VideoFormat format() const override;
             virtual Timing timing() const override;
 
@@ -204,8 +185,6 @@ namespace NDI {
             void*                               m_audioData[2];
             mutable int                         m_audioDataIndex;
             bool                                m_isInitialized;
-            mutable bool                        m_isBounded;
-            bool                                m_isAsyncSDISend; 
             bool                                m_isPbos;
             size_t                              m_pboSize;
             size_t                              m_videoFrameBufferSize;
@@ -214,15 +193,11 @@ namespace NDI {
             size_t                              m_frameWidth;
             size_t                              m_frameHeight;
             mutable size_t                      m_totalPlayoutFrames;
-            mutable int                         m_transferTextureID;        
             size_t                              m_internalAudioFormat;
             size_t                              m_internalVideoFormat;
             size_t                              m_internalDataFormat;
             size_t                              m_internalSyncMode;
-            unsigned long                       m_framesPerSecond;
-            unsigned long                       m_audioBufferSampleLength;
             unsigned long                       m_audioSamplesPerFrame;
-            mutable bool                        m_isFrameCompleted;
             unsigned long                       m_audioChannelCount;
             TwkAudio::Format                    m_audioFormat;
             GLenum                              m_textureFormat;

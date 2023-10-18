@@ -180,12 +180,10 @@ NDIVideoDevice::NDIVideoDevice(NDIModule* m,
       m_isOpen(false),
       m_isStereo(false),
       m_totalPlayoutFrames(0),
-      m_transferTextureID(-1),
       m_internalAudioFormat(0),
       m_internalVideoFormat(0),
       m_internalDataFormat(0),
-      m_internalSyncMode(0),
-      m_isFrameCompleted(true)
+      m_internalSyncMode(0)
 {
     m_audioFrameSizes.resize(5);
     
@@ -671,9 +669,7 @@ bool NDIVideoDevice::isOpen() const
     return m_isOpen;
 }
 
-void NDIVideoDevice::makeCurrent() const { }
 void NDIVideoDevice::clearCaches() const { }
-void NDIVideoDevice::syncBuffers() const { }
 
 bool NDIVideoDevice::isDualStereo() const
 {
