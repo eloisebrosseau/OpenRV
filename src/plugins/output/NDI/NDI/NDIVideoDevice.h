@@ -12,6 +12,7 @@
 #include <TwkUtil/Timer.h>
 #include <boost/thread.hpp>
 #include <cstddef>
+#include <string>
 
 #ifdef PLATFORM_WINDOWS
 #include <GL/gl.h>
@@ -50,33 +51,34 @@ namespace NDI {
     typedef boost::mutex              Mutex;
     typedef boost::condition_variable Condition;
     typedef unsigned char             NDIVideoFrame;
+    typedef unsigned char             NDIAudioFrame;
 
     struct NDIDataFormat
     {
-        const char*                             desc;
         TwkApp::VideoDevice::InternalDataFormat iformat;
         NDIlib_FourCC_video_type_e              ndiFormat;
         bool                                    rgb;
+        const char*                             description;
     };
 
     struct NDIVideoFormat
     {
-        int             width;
-        int             height;
-        float           pa;
-        float           hz;
-        int             frame_rate_N;
-        int             frame_rate_D;
-        const char*     desc;
+        int         width;
+        int         height;
+        float       pa;
+        float       hz;
+        int         frame_rate_N;
+        int         frame_rate_D;
+        const char* description;
     };
 
     struct NDIAudioFormat
     {
-        double             hz;
-        TwkAudio::Format   prec;
-        size_t             numChannels;
-        TwkAudio::Layout   layout;
-        const char*        desc;
+        double           hz;
+        TwkAudio::Format prec;
+        size_t           numChannels;
+        TwkAudio::Layout layout;
+        const char*      description;
     };
 
     typedef std::vector<NDIVideoFormat> NDIVideoFormatVector;
@@ -92,6 +94,7 @@ namespace NDI {
             typedef stl_ext::thread_group                   ThreadGroup;
             typedef std::vector<int>                        AudioBuffer;
             typedef std::deque<NDIVideoFrame*>              DLVideoFrameDeque;
+
             struct PBOData
             {
                 enum State { Mapped, Transferring, NeedsUnmap, Ready };
@@ -118,11 +121,11 @@ namespace NDI {
             {
                 FrameData(): audioData(nullptr), videoFrame(nullptr) {}
                 ~FrameData() {}
-                void*                   audioData;
-                void*                   videoFrame;
+                void* audioData;
+                void* videoFrame;
             };
 
-            typedef std::deque<PBOData*>                    PBOQueue;
+            typedef std::deque<PBOData*> PBOQueue;
 
             NDIVideoDevice(NDIModule* ndiModule, const std::string& name);
             virtual ~NDIVideoDevice() override;
@@ -200,14 +203,14 @@ namespace NDI {
             mutable PBOData*                    m_secondLastPboData;  // use of stereo formats; stores left eye.
             void*                               m_audioData[2];
             mutable int                         m_audioDataIndex;
-            bool                                m_initialized;
-            mutable bool                        m_bound;
-            bool                                m_asyncSDISend; 
-            bool                                m_pbos;
+            bool                                m_isInitialized;
+            mutable bool                        m_isBounded;
+            bool                                m_isAsyncSDISend; 
+            bool                                m_isPbos;
             size_t                              m_pboSize;
             size_t                              m_videoFrameBufferSize;
-            bool                                m_open;  
-            bool                                m_stereo;
+            bool                                m_isOpen;  
+            bool                                m_isStereo;
             size_t                              m_frameWidth;
             size_t                              m_frameHeight;
             mutable size_t                      m_totalPlayoutFrames;
@@ -219,12 +222,12 @@ namespace NDI {
             unsigned long                       m_framesPerSecond;
             unsigned long                       m_audioBufferSampleLength;
             unsigned long                       m_audioSamplesPerFrame;
-            mutable bool                        m_frameCompleted;
+            mutable bool                        m_isFrameCompleted;
             unsigned long                       m_audioChannelCount;
             TwkAudio::Format                    m_audioFormat;
             GLenum                              m_textureFormat;
             GLenum                              m_textureType;
-            static bool                         m_infoFeedback;
+            static bool                         m_isInfoFeedback;
     };
 
 } // NDI
