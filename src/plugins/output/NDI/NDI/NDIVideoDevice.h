@@ -61,8 +61,8 @@ namespace NDI {
     {
         int         width;
         int         height;
-        float       pa;
-        float       hz;
+        float       pixelAspect;
+        float       hertz;
         int         frame_rate_N;
         int         frame_rate_D;
         const char* description;
@@ -70,8 +70,8 @@ namespace NDI {
 
     struct NDIAudioFormat
     {
-        double           hz;
-        TwkAudio::Format prec;
+        int              hertz;
+        TwkAudio::Format precision;
         size_t           numChannels;
         TwkAudio::Layout layout;
         const char*      description;
@@ -169,40 +169,44 @@ namespace NDI {
             void transferChannelPBO(size_t i, const TwkGLF::GLFBO*, NDIVideoFrame*, NDIVideoFrame*) const;
             void transferChannelReadPixels(size_t i, const TwkGLF::GLFBO*, NDIVideoFrame*, NDIVideoFrame*) const;
 
-            NDIVideoFormatVector                m_ndiVideoFormats;
-            NDIDataFormatVector                 m_ndiDataFormats;
-            NDIlib_send_instance_t              m_ndiSender{nullptr};
-            mutable NDIlib_video_frame_v2_t     m_ndiVideoFrame;
-            mutable NDIVideoFrame*              m_readyFrame;
-            mutable NDIVideoFrame*              m_readyStereoFrame;
-            mutable DLVideoFrameDeque           m_DLOutputVideoFrameQueue;
-            mutable DLVideoFrameDeque           m_DLReadbackVideoFrameQueue; // only rgb formats
-            mutable bool                        m_needsFrameConverter;
-            mutable bool                        m_hasAudio;
-            mutable PBOQueue                    m_pboQueue;
-            mutable PBOData*                    m_lastPboData;
-            mutable PBOData*                    m_secondLastPboData;  // use of stereo formats; stores left eye.
-            void*                               m_audioData[2];
-            mutable int                         m_audioDataIndex;
-            bool                                m_isInitialized;
-            bool                                m_isPbos;
-            size_t                              m_pboSize;
-            size_t                              m_videoFrameBufferSize;
-            bool                                m_isOpen;  
-            bool                                m_isStereo;
-            size_t                              m_frameWidth;
-            size_t                              m_frameHeight;
-            mutable size_t                      m_totalPlayoutFrames;
-            size_t                              m_internalAudioFormat;
-            size_t                              m_internalVideoFormat;
-            size_t                              m_internalDataFormat;
-            size_t                              m_internalSyncMode;
-            unsigned long                       m_audioSamplesPerFrame;
-            unsigned long                       m_audioChannelCount;
-            TwkAudio::Format                    m_audioFormat;
-            GLenum                              m_textureFormat;
-            GLenum                              m_textureType;
-            static bool                         m_isInfoFeedback;
+            NDIVideoFormatVector                             m_ndiVideoFormats;
+            NDIDataFormatVector                              m_ndiDataFormats;
+            NDIlib_send_instance_t                           m_ndiSender{nullptr};
+            mutable NDIlib_video_frame_v2_t                  m_ndiVideoFrame;
+            mutable NDIlib_audio_frame_v2_t                  m_ndiAudioFrame;
+            mutable NDIlib_audio_frame_interleaved_16s_t     m_ndiInterleaved16AudioFrame;
+            mutable NDIlib_audio_frame_interleaved_32s_t     m_ndiInterleaved32AudioFrame;
+            mutable NDIVideoFrame*                           m_readyFrame;
+            mutable NDIVideoFrame*                           m_readyStereoFrame;
+            mutable DLVideoFrameDeque                        m_DLOutputVideoFrameQueue;
+            mutable DLVideoFrameDeque                        m_DLReadbackVideoFrameQueue; // only rgb formats
+            mutable bool                                     m_needsFrameConverter;
+            mutable bool                                     m_hasAudio;
+            mutable PBOQueue                                 m_pboQueue;
+            mutable PBOData*                                 m_lastPboData;
+            mutable PBOData*                                 m_secondLastPboData;  // use of stereo formats; stores left eye.
+            void*                                            m_audioData[2];
+            mutable int                                      m_audioDataIndex;
+            bool                                             m_isInitialized;
+            bool                                             m_isPbos;
+            size_t                                           m_pboSize;
+            size_t                                           m_videoFrameBufferSize;
+            bool                                             m_isOpen;  
+            bool                                             m_isStereo;
+            size_t                                           m_frameWidth;
+            size_t                                           m_frameHeight;
+            mutable size_t                                   m_totalPlayoutFrames;
+            size_t                                           m_internalAudioFormat;
+            size_t                                           m_internalVideoFormat;
+            size_t                                           m_internalDataFormat;
+            size_t                                           m_internalSyncMode;
+            unsigned long                                    m_audioSamplesPerFrame;
+            unsigned long                                    m_audioChannelCount;
+            unsigned long                                    m_audioSampleRate;
+            TwkAudio::Format                                 m_audioFormat;
+            GLenum                                           m_textureFormat;
+            GLenum                                           m_textureType;
+            static bool                                      m_isInfoFeedback;
     };
 
 } // NDI

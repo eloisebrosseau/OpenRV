@@ -189,9 +189,9 @@ public:
                     const std::string& desc)
             : hz(rate),
               format(t),
-              description(desc),
               numChannels(n),
-              layout(layout) {}
+              layout(layout),
+              description(desc) {}
 
         Time               hz;
         TwkAudio::Format   format;
