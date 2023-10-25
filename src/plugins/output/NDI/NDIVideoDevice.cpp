@@ -50,7 +50,6 @@ struct NDISyncSource
 };
 
 static NDIDataFormat dataFormats[] = {
-    {VideoDevice::RGB8, NDIlib_FourCC_type_RGBX, true, "8-bit RGB"},
     {VideoDevice::RGBA8, NDIlib_FourCC_type_RGBA, true, "8-bit RGBA"},
     {VideoDevice::BGRA8, NDIlib_FourCC_type_BGRA, true, "8-bit BGRA"},
     {VideoDevice::CbY0CrY1_8_422, NDIlib_FourCC_type_UYVY, false, "8-bit UYVY"}
@@ -540,12 +539,6 @@ void NDIVideoDevice::open(const StringVector& args)
     m_audioSamplesPerFrame = static_cast<unsigned long>((m_audioSampleRate * 10) / 1000);
         
     // Allocater audio buffers
-    m_ndiAudioFrame.sample_rate = audioFormat.hertz;
-    m_ndiAudioFrame.no_channels = static_cast<int>(audioFormat.numChannels);
-    m_ndiAudioFrame.no_samples = 1602;
-    m_ndiAudioFrame.p_data = static_cast<float*>(malloc(static_cast<unsigned long>(m_ndiAudioFrame.no_samples * m_ndiAudioFrame.no_channels) * sizeof(float)));
-	m_ndiAudioFrame.channel_stride_in_bytes = m_ndiAudioFrame.no_samples * static_cast<int>(sizeof(float));
-
     if (m_audioFormat == TwkAudio::Int16Format)
     {
         m_audioData[0] = new short[m_audioSamplesPerFrame * m_audioChannelCount];
@@ -555,9 +548,6 @@ void NDIVideoDevice::open(const StringVector& args)
         m_ndiInterleaved16AudioFrame.no_channels = static_cast<int>(audioFormat.numChannels);
         m_ndiInterleaved16AudioFrame.no_samples = 1602;
         m_ndiInterleaved16AudioFrame.p_data = static_cast<short*>(malloc(static_cast<unsigned long>(m_ndiAudioFrame.no_samples * m_ndiAudioFrame.no_channels) * sizeof(short)));
-        // m_ndiInterleaved16AudioFrame.p_data = reinterpret_cast<short*>(m_audioData[m_audioDataIndex]);
-
-        NDIlib_util_audio_from_interleaved_16s_v2(&m_ndiInterleaved16AudioFrame, &m_ndiAudioFrame);
     }
     else // 32
     {
@@ -567,8 +557,7 @@ void NDIVideoDevice::open(const StringVector& args)
         m_ndiInterleaved32AudioFrame.sample_rate = audioFormat.hertz;
         m_ndiInterleaved32AudioFrame.no_channels = static_cast<int>(audioFormat.numChannels);
         m_ndiInterleaved32AudioFrame.no_samples = 1602;
-        // m_ndiInterleaved32AudioFrame.p_data = reinterpret_cast<int*>(m_audioData[m_audioDataIndex]);
-        NDIlib_util_audio_from_interleaved_32s_v2(&m_ndiInterleaved32AudioFrame, &m_ndiAudioFrame);
+        m_ndiInterleaved32AudioFrame.p_data = static_cast<int*>(malloc(static_cast<unsigned long>(m_ndiAudioFrame.no_samples * m_ndiAudioFrame.no_channels) * sizeof(short)));
     }
 
     if (!dataFormat.rgb) {
@@ -673,9 +662,6 @@ void NDIVideoDevice::close()
 
         if (m_ndiSender)
         {
-            // Free the video frame
-            free(static_cast<void*>(m_ndiVideoFrame.p_data));
-            free(static_cast<void*>(m_ndiAudioFrame.p_data));
             NDIlib_send_destroy(m_ndiSender);
             m_ndiSender = nullptr;
         }
@@ -769,21 +755,22 @@ bool NDIVideoDevice::transferChannel(size_t n, const GLFBO* fbo) const
     m_ndiVideoFrame.p_data = m_readyFrame + (m_ndiVideoFrame.yres - 1) * lineStrideInBytes;
     m_ndiVideoFrame.line_stride_in_bytes = -1 * lineStrideInBytes;
 
-    int rc = pthread_mutex_lock( &audioMutex );
+    int rc = pthread_mutex_lock(&audioMutex);
 
-    if( m_hasAudio )
+    if(m_hasAudio)
     {
-        rc = pthread_mutex_unlock( &audioMutex );
+        rc = pthread_mutex_unlock(&audioMutex);
         int index = (m_audioDataIndex == 1) ? 0 : 1;
-        m_ndiAudioFrame.p_data = reinterpret_cast<float*>(m_audioData[index]);
-        NDIlib_send_send_audio_v2(m_ndiSender, &m_ndiAudioFrame);
+        if (m_audioFormat == TwkAudio::Int16Format)
+        {
+            m_ndiInterleaved16AudioFrame.p_data = static_cast<short*>(m_audioData[index]);
+            NDIlib_util_send_send_audio_interleaved_16s(m_ndiSender, &m_ndiInterleaved16AudioFrame);
+        }
+        else {
+            m_ndiInterleaved32AudioFrame.p_data = static_cast<int*>(m_audioData[index]);
+            NDIlib_util_send_send_audio_interleaved_32s(m_ndiSender, &m_ndiInterleaved32AudioFrame);
+        }
     }
-
-    // NDIlib_util_audio_from_interleaved_32f_v2(&m_ndiInterleaved32fAudioFrame, &m_ndiAudioFrame);
-    // NDIlib_send_send_audio_v2(m_ndiSender, &m_ndiAudioFrame);
-
-
-    // NDIlib_util_send_send_audio_interleaved_16s(m_ndiSender, &m_ndiInterleaved16AudioFrame);
 
     // Send the video frame
     NDIlib_send_send_video_v2(m_ndiSender, &m_ndiVideoFrame);
