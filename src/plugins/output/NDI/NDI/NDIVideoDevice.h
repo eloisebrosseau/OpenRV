@@ -61,8 +61,8 @@ namespace NDI {
     {
         int         width;
         int         height;
-        float       pixelAspect;
-        float       hertz;
+        float      pixelAspect;
+        double       hertz;
         int         frame_rate_N;
         int         frame_rate_D;
         const char* description;
@@ -176,6 +176,7 @@ namespace NDI {
             mutable NDIlib_audio_frame_v2_t                  m_ndiAudioFrame;
             mutable NDIlib_audio_frame_interleaved_16s_t     m_ndiInterleaved16AudioFrame;
             mutable NDIlib_audio_frame_interleaved_32s_t     m_ndiInterleaved32AudioFrame;
+            mutable NDIlib_audio_frame_interleaved_32f_t     m_ndiInterleaved32fAudioFrame;
             mutable NDIVideoFrame*                           m_readyFrame;
             mutable NDIVideoFrame*                           m_readyStereoFrame;
             mutable DLVideoFrameDeque                        m_DLOutputVideoFrameQueue;

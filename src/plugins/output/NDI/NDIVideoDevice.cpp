@@ -57,18 +57,18 @@ static NDIDataFormat dataFormats[] = {
 
 static NDIVideoFormat videoFormats[] = {
     {1280, 720, 1.0, 50.00, 60000, 1200, "720p 50Hz"},
-    // {1280, 720, 1.0, 59.94, 60000, 1001, "720p 59.94Hz"},
+    {1280, 720, 1.0, 59.94, 60000, 1001, "720p 59.94Hz"},
     {1280, 720, 1.0, 60.00, 60000, 1000, "720p 60Hz"},
     {1920, 1080, 1.0, 25.00, 50000, 1000, "1080i 50Hz"},
-    // {1920, 1080, 1.0, 29.97, 50000, 1001, "1080i 59.94Hz"},
+    {1920, 1080, 1.0, 29.97, 50000, 1001, "1080i 59.94Hz"},
     {1920, 1080, 1.0, 30.00, 50000, 1000, "1080i 60Hz"},
-    // {1920, 1080, 1.0, 23.98, 24000, 1001, "1080p 23.98Hz"},
+    {1920, 1080, 1.0, 23.98, 24000, 1001, "1080p 23.98Hz"},
     {1920, 1080, 1.0, 24.00, 24000, 1000, "1080p 24Hz"},
     {1920, 1080, 1.0, 25.00, 30000, 1200, "1080p 25Hz"},
-    // {1920, 1080, 1.0, 29.97, 24000, 1001, "1080p 29.97Hz"},
+    {1920, 1080, 1.0, 29.97, 24000, 1001, "1080p 29.97Hz"},
     {1920, 1080, 1.0, 30.00, 30000, 1000, "1080p 30Hz"},
     {1920, 1080, 1.0, 50.00, 60000, 1200, "1080p 50Hz"},
-    // {1920, 1080, 1.0, 59.94, 60000, 1001, "1080p 59.94Hz"},
+    {1920, 1080, 1.0, 59.94, 60000, 1001, "1080p 59.94Hz"},
     {1920, 1080, 1.0, 60.00, 60000, 1000, "1080p 60Hz"},
     {0, 0, 1.0, 00.00, 0, 0, nullptr},
 };
@@ -76,7 +76,7 @@ static NDIVideoFormat videoFormats[] = {
 static NDIAudioFormat audioFormats[] = {
     {48000, TwkAudio::Int16Format, 2, TwkAudio::Stereo_2, "16-bit 48kHz Stereo"},
     {48000, TwkAudio::Int32Format, 2, TwkAudio::Stereo_2, "32-bit 48kHz Stereo"},
-    {48000, TwkAudio::Int32Format, 8, TwkAudio::Surround_7_1, "32-bit 48kHz 7.1 Surround"},
+    {48000, TwkAudio::Float32Format, 8, TwkAudio::Surround_7_1, "32-bit Float 48kHz 7.1 Surround"},
     {48000, TwkAudio::Int32Format, 8, TwkAudio::SDDS_7_1, "32-bit 48kHz 7.1 Surround SDDS"},
     {48000, TwkAudio::Int32Format, 16, TwkAudio::Generic_16, "32-bit 48kHz 16 channel"}
 };
@@ -293,7 +293,7 @@ size_t NDIVideoDevice::numVideoFormats() const
 NDIVideoDevice::VideoFormat NDIVideoDevice::videoFormatAtIndex(size_t index) const
 {
     const NDIVideoFormat& videoFormat = m_ndiVideoFormats[index];
-    return VideoFormat(static_cast<size_t>(videoFormat.width), static_cast<size_t>(videoFormat.height), videoFormat.pixelAspect, 1.0f, videoFormat.hertz, videoFormat.description);
+    return VideoFormat(static_cast<size_t>(videoFormat.width), static_cast<size_t>(videoFormat.height), videoFormat.pixelAspect, 1.0f, static_cast<float>(videoFormat.hertz), videoFormat.description);
 }
 
 size_t NDIVideoDevice::currentVideoFormat() const
@@ -331,13 +331,13 @@ void NDIVideoDevice::setVideoFormat(size_t index)
 NDIVideoDevice::Timing NDIVideoDevice::timing() const
 {
     const NDIVideoFormat& videoFormat = m_ndiVideoFormats[m_internalVideoFormat];
-    return NDIVideoDevice::Timing(videoFormat.hertz);
+    return NDIVideoDevice::Timing(static_cast<float>(videoFormat.hertz));
 }
 
 NDIVideoDevice::VideoFormat NDIVideoDevice::format() const
 {
     const NDIVideoFormat& videoFormat = m_ndiVideoFormats[m_internalVideoFormat];
-    return NDIVideoDevice::VideoFormat(static_cast<size_t>(videoFormat.width), static_cast<size_t>(videoFormat.height), videoFormat.pixelAspect, 1.0f, videoFormat.hertz, videoFormat.description);
+    return NDIVideoDevice::VideoFormat(static_cast<size_t>(videoFormat.width), static_cast<size_t>(videoFormat.height), videoFormat.pixelAspect, 1.0f, static_cast<float>(videoFormat.hertz), videoFormat.description);
 }
 
 size_t NDIVideoDevice::numSyncModes() const
@@ -536,7 +536,9 @@ void NDIVideoDevice::open(const StringVector& args)
     m_ndiVideoFrame.frame_rate_D = videoFormat.frame_rate_D;
 
     m_audioSampleRate = static_cast<unsigned long>(audioFormat.hertz);
-    m_audioSamplesPerFrame = static_cast<unsigned long>((m_audioSampleRate * 10) / 1000);
+    const float frameDuration = static_cast<float>(videoFormat.frame_rate_D)/ videoFormat.frame_rate_N;
+    m_audioSamplesPerFrame = static_cast<unsigned long>(static_cast<double>(m_audioSampleRate * frameDuration) + 0.5);
+
         
     // Allocater audio buffers
     if (m_audioFormat == TwkAudio::Int16Format)
@@ -546,8 +548,18 @@ void NDIVideoDevice::open(const StringVector& args)
 
         m_ndiInterleaved16AudioFrame.sample_rate = audioFormat.hertz;
         m_ndiInterleaved16AudioFrame.no_channels = static_cast<int>(audioFormat.numChannels);
-        m_ndiInterleaved16AudioFrame.no_samples = 1602;
+        m_ndiInterleaved16AudioFrame.no_samples = static_cast<int>(m_audioSamplesPerFrame);
         m_ndiInterleaved16AudioFrame.p_data = static_cast<short*>(malloc(static_cast<unsigned long>(m_ndiAudioFrame.no_samples * m_ndiAudioFrame.no_channels) * sizeof(short)));
+    }
+    else if (m_audioFormat == TwkAudio::Float32Format)
+    {
+        m_audioData[0] = new float[m_audioSamplesPerFrame * m_audioChannelCount];
+        m_audioData[1] = new float[m_audioSamplesPerFrame * m_audioChannelCount];
+
+        m_ndiInterleaved32fAudioFrame.sample_rate = audioFormat.hertz;
+        m_ndiInterleaved32fAudioFrame.no_channels = static_cast<int>(audioFormat.numChannels);
+        m_ndiInterleaved32fAudioFrame.no_samples = static_cast<int>(m_audioSamplesPerFrame);
+        m_ndiInterleaved32fAudioFrame.p_data = static_cast<float*>(malloc(static_cast<unsigned long>(m_ndiAudioFrame.no_samples * m_ndiAudioFrame.no_channels) * sizeof(float)));
     }
     else // 32
     {
@@ -556,8 +568,8 @@ void NDIVideoDevice::open(const StringVector& args)
 
         m_ndiInterleaved32AudioFrame.sample_rate = audioFormat.hertz;
         m_ndiInterleaved32AudioFrame.no_channels = static_cast<int>(audioFormat.numChannels);
-        m_ndiInterleaved32AudioFrame.no_samples = 1602;
-        m_ndiInterleaved32AudioFrame.p_data = static_cast<int*>(malloc(static_cast<unsigned long>(m_ndiAudioFrame.no_samples * m_ndiAudioFrame.no_channels) * sizeof(short)));
+        m_ndiInterleaved32AudioFrame.no_samples = static_cast<int>(m_audioSamplesPerFrame);
+        m_ndiInterleaved32AudioFrame.p_data = static_cast<int*>(malloc(static_cast<unsigned long>(m_ndiAudioFrame.no_samples * m_ndiAudioFrame.no_channels) * sizeof(int)));
     }
 
     if (!dataFormat.rgb) {
@@ -700,10 +712,11 @@ void NDIVideoDevice::transferAudio(void* data, size_t) const
     rc = pthread_mutex_unlock(&audioMutex);  
     
     size_t b = 2;
-    if (m_audioFormat == TwkAudio::Int32Format)
+    if (m_audioFormat == TwkAudio::Int32Format || m_audioFormat == TwkAudio::Float32Format )
     {
         b = 4;
     }
+
     memcpy(m_audioData[m_audioDataIndex], data, b * m_audioSamplesPerFrame * m_audioChannelCount);
     m_audioDataIndex = (m_audioDataIndex + 1) % 2;
 }
@@ -757,7 +770,7 @@ bool NDIVideoDevice::transferChannel(size_t n, const GLFBO* fbo) const
 
     int rc = pthread_mutex_lock(&audioMutex);
 
-    if(m_hasAudio)
+    if (m_hasAudio)
     {
         rc = pthread_mutex_unlock(&audioMutex);
         int index = (m_audioDataIndex == 1) ? 0 : 1;
@@ -766,7 +779,13 @@ bool NDIVideoDevice::transferChannel(size_t n, const GLFBO* fbo) const
             m_ndiInterleaved16AudioFrame.p_data = static_cast<short*>(m_audioData[index]);
             NDIlib_util_send_send_audio_interleaved_16s(m_ndiSender, &m_ndiInterleaved16AudioFrame);
         }
-        else {
+        else if (m_audioFormat == TwkAudio::Float32Format)
+        {
+            m_ndiInterleaved32fAudioFrame.p_data = static_cast<float*>(m_audioData[index]);
+            NDIlib_util_send_send_audio_interleaved_32f(m_ndiSender, &m_ndiInterleaved32fAudioFrame);
+        }
+        else
+        {
             m_ndiInterleaved32AudioFrame.p_data = static_cast<int*>(m_audioData[index]);
             NDIlib_util_send_send_audio_interleaved_32s(m_ndiSender, &m_ndiInterleaved32AudioFrame);
         }
