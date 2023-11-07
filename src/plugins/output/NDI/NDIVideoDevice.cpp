@@ -56,20 +56,35 @@ static NDIDataFormat dataFormats[] = {
 };
 
 static NDIVideoFormat videoFormats[] = {
-    {1280, 720, 1.0, 50.00, 60000, 1200, "720p 50Hz"},
+    {1280, 720, 1.0, 50.00, 50000, 1000, "720p 50Hz"},
     {1280, 720, 1.0, 59.94, 60000, 1001, "720p 59.94Hz"},
     {1280, 720, 1.0, 60.00, 60000, 1000, "720p 60Hz"},
-    {1920, 1080, 1.0, 25.00, 50000, 1000, "1080i 50Hz"},
+    {1920, 1080, 1.0, 25.00, 25000, 1000, "1080i 50Hz"},
     {1920, 1080, 1.0, 29.97, 50000, 1001, "1080i 59.94Hz"},
-    {1920, 1080, 1.0, 30.00, 50000, 1000, "1080i 60Hz"},
+    {1920, 1080, 1.0, 30.00, 30000, 1000, "1080i 60Hz"},
     {1920, 1080, 1.0, 23.98, 24000, 1001, "1080p 23.98Hz"},
     {1920, 1080, 1.0, 24.00, 24000, 1000, "1080p 24Hz"},
-    {1920, 1080, 1.0, 25.00, 30000, 1200, "1080p 25Hz"},
-    {1920, 1080, 1.0, 29.97, 24000, 1001, "1080p 29.97Hz"},
+    {1920, 1080, 1.0, 25.00, 25000, 1000, "1080p 25Hz"},
+    {1920, 1080, 1.0, 29.97, 30000, 1001, "1080p 29.97Hz"},
     {1920, 1080, 1.0, 30.00, 30000, 1000, "1080p 30Hz"},
-    {1920, 1080, 1.0, 50.00, 60000, 1200, "1080p 50Hz"},
+    {1920, 1080, 1.0, 50.00, 50000, 1000, "1080p 50Hz"},
     {1920, 1080, 1.0, 59.94, 60000, 1001, "1080p 59.94Hz"},
     {1920, 1080, 1.0, 60.00, 60000, 1000, "1080p 60Hz"},
+    {2048, 1080, 1.0, 23.98, 24000, 1001, "2K 23.98Hz"},
+    {2048, 1080, 1.0, 24.00, 24000, 1000, "2K 24Hz"},
+    {2048, 1080, 1.0, 25.00, 25000, 1000, "2K 25Hz"},
+    {2048, 1080, 1.0, 29.97, 30000, 1001, "2K 29.97Hz"},
+    {2048, 1080, 1.0, 30.00, 30000, 1000, "2K 30Hz"},
+    {2048, 1080, 1.0, 50.00, 50000, 1000, "2K 50Hz"},
+    {2048, 1080, 1.0, 59.94, 60000, 1001, "2K 59.94Hz"},
+    {2048, 1080, 1.0, 60.00, 60000, 1000, "2K 60Hz"},
+    {4096, 2160, 1.0, 23.98, 24000, 1001, "4K 23.98Hz"},
+    {4096, 2160, 1.0, 24.00, 24000, 1000, "4K 24Hz"},
+    {4096, 2160, 1.0, 25.00, 25000, 1000, "4K 25Hz"},
+    {4096, 2160, 1.0, 29.97, 30000, 1001, "4K 29.97Hz"},
+    {4096, 2160, 1.0, 30.00, 30000, 1000, "4K 30Hz"},
+    {4096, 2160, 1.0, 50.00, 50000, 1000, "4K 50Hz"},
+    {4096, 2160, 1.0, 59.94, 50000, 1001, "4K 59.94Hz"},
     {0, 0, 1.0, 00.00, 0, 0, nullptr},
 };
         
@@ -136,17 +151,11 @@ static int pixelSizeInBytesFromNDIVideoType(const NDIlib_FourCC_video_type_e ndi
 {
     switch (ndiVideoType)
     {
-        case NDIlib_FourCC_type_BGRX:
-            return 4;
         case NDIlib_FourCC_type_BGRA:
             return 4;
         case NDIlib_FourCC_type_RGBA:
             return 4;
-        case NDIlib_FourCC_type_RGBX:
-            return 4;
         case NDIlib_FourCC_type_UYVY:
-            return 2;
-        case NDIlib_FourCC_type_UYVA:
             return 2;
         default:
             std::cout << "ERROR: Unknown data format.\n";
@@ -527,19 +536,18 @@ void NDIVideoDevice::open(const StringVector& args)
     m_textureType = epair.second;
 
     m_isStereo = dname.find("Stereo") != std::string::npos;
-    m_videoFrameBufferSize = m_isStereo ? m_pboSize * 2 : m_pboSize; 
+    m_videoFrameBufferSize = m_isStereo ? m_pboSize * 2 : m_pboSize;
 
 	m_ndiVideoFrame.xres = videoFormat.width;
-	m_ndiVideoFrame.yres = videoFormat.height;
+    m_ndiVideoFrame.yres = videoFormat.height;
 	m_ndiVideoFrame.FourCC = dataFormat.ndiFormat;
     m_ndiVideoFrame.frame_rate_N = videoFormat.frame_rate_N;
     m_ndiVideoFrame.frame_rate_D = videoFormat.frame_rate_D;
 
     m_audioSampleRate = static_cast<unsigned long>(audioFormat.hertz);
-    const float frameDuration = static_cast<float>(videoFormat.frame_rate_D)/ videoFormat.frame_rate_N;
+    const float frameDuration = static_cast<float>(videoFormat.frame_rate_D) / videoFormat.frame_rate_N;
     m_audioSamplesPerFrame = static_cast<unsigned long>(static_cast<double>(m_audioSampleRate * frameDuration) + 0.5);
 
-        
     // Allocater audio buffers
     if (m_audioFormat == TwkAudio::Int16Format)
     {
@@ -561,7 +569,7 @@ void NDIVideoDevice::open(const StringVector& args)
         m_ndiInterleaved32fAudioFrame.no_samples = static_cast<int>(m_audioSamplesPerFrame);
         m_ndiInterleaved32fAudioFrame.p_data = static_cast<float*>(malloc(static_cast<unsigned long>(m_ndiAudioFrame.no_samples * m_ndiAudioFrame.no_channels) * sizeof(float)));
     }
-    else // 32
+    else
     {
         m_audioData[0] = new int[m_audioSamplesPerFrame * m_audioChannelCount];
         m_audioData[1] = new int[m_audioSamplesPerFrame * m_audioChannelCount];
@@ -572,7 +580,7 @@ void NDIVideoDevice::open(const StringVector& args)
         m_ndiInterleaved32AudioFrame.p_data = static_cast<int*>(malloc(static_cast<unsigned long>(m_ndiAudioFrame.no_samples * m_ndiAudioFrame.no_channels) * sizeof(int)));
     }
 
-    if (!dataFormat.rgb) {
+    if (!dataFormat.isRGB) {
         m_needsFrameConverter = true;
     }
 
@@ -585,17 +593,17 @@ void NDIVideoDevice::open(const StringVector& args)
         NDIVideoFrame* outputFrame = nullptr;
         const NDIDataFormat& internalDataFormat = m_ndiDataFormats[m_internalDataFormat];
         size_t bps = 4 * m_frameWidth;
-        if (internalDataFormat.iformat > VideoDevice::Y0CbY1Cr_8_422)
+        if (internalDataFormat.iformat > VideoDevice::CbY0CrY1_8_422)
         {
             bps = 128 * ((m_frameWidth + 47) / 48);
         }
-        else if (internalDataFormat.iformat == VideoDevice::Y0CbY1Cr_8_422)
+        else if (internalDataFormat.iformat == VideoDevice::CbY0CrY1_8_422)
         {
             bps = 2 * m_frameWidth;
         }
         // TODO: Allocate output frame
         outputFrame = new NDIVideoFrame[m_frameHeight * bps];
-        memset(outputFrame, 128, m_frameHeight * bps);
+        std::memset(outputFrame, 128, m_frameHeight * bps);
         m_DLOutputVideoFrameQueue.push_back(outputFrame);
         
         if (!m_needsFrameConverter)
@@ -717,7 +725,7 @@ void NDIVideoDevice::transferAudio(void* data, size_t) const
         b = 4;
     }
 
-    memcpy(m_audioData[m_audioDataIndex], data, b * m_audioSamplesPerFrame * m_audioChannelCount);
+    std::memcpy(m_audioData[m_audioDataIndex], data, b * m_audioSamplesPerFrame * m_audioChannelCount);
     m_audioDataIndex = (m_audioDataIndex + 1) % 2;
 }
 
@@ -761,12 +769,20 @@ bool NDIVideoDevice::transferChannel(size_t n, const GLFBO* fbo) const
 
     // Set the new data pointer and calculate line stride
     // Note that the NDI SDK is expecting a top-down image whereas OpenGL is 
-    // giving a bottom up image so we need to point the data pointer to the
-    // last line of the image and program a negative line stride.
+    // giving a bottom up image so we need to invert the image data with a
+    // vertical flip.
     int pixelSizeInBytes = pixelSizeInBytesFromNDIVideoType(m_ndiVideoFrame.FourCC);
     int lineStrideInBytes = m_ndiVideoFrame.xres * pixelSizeInBytes;
-    m_ndiVideoFrame.p_data = m_readyFrame + (m_ndiVideoFrame.yres - 1) * lineStrideInBytes;
-    m_ndiVideoFrame.line_stride_in_bytes = -1 * lineStrideInBytes;
+    int totalBytes = lineStrideInBytes * m_ndiVideoFrame.yres;
+    int height = m_ndiVideoFrame.yres;
+    m_ndiVideoFrame.p_data = new uint8_t[totalBytes];
+    m_ndiVideoFrame.line_stride_in_bytes = lineStrideInBytes;
+
+    for (int row = 0; row < height; row++)
+    {
+        int flippedRow = height - row - 1;
+        std::memcpy(m_ndiVideoFrame.p_data + flippedRow * lineStrideInBytes, m_readyFrame + row * lineStrideInBytes, lineStrideInBytes);
+    }
 
     int rc = pthread_mutex_lock(&audioMutex);
 
@@ -793,7 +809,7 @@ bool NDIVideoDevice::transferChannel(size_t n, const GLFBO* fbo) const
 
     // Send the video frame
     NDIlib_send_send_video_v2(m_ndiSender, &m_ndiVideoFrame);
-    
+
     rc = pthread_mutex_unlock(&audioMutex);
 
     return true;
@@ -835,9 +851,9 @@ void NDIVideoDevice::transferChannelPBO(size_t n,
         
         lastPboData->lockState();
         lastPboData->state = PBOData::Transferring; 
-        lastPboData->unlockState(); 
+        lastPboData->unlockState();
         
-        void* p = static_cast<void*>(glMapBuffer(GL_PIXEL_PACK_BUFFER_ARB, GL_READ_ONLY_ARB)); TWK_GLDEBUG;       
+        int* p = static_cast<int*>(glMapBuffer(GL_PIXEL_PACK_BUFFER_ARB, GL_READ_ONLY_ARB)); TWK_GLDEBUG;       
         if (p != nullptr) 
         {        
             void* pFrame = nullptr;

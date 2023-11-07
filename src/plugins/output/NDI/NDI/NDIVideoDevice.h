@@ -53,7 +53,7 @@ namespace NDI {
     {
         TwkApp::VideoDevice::InternalDataFormat iformat;
         NDIlib_FourCC_video_type_e              ndiFormat;
-        bool                                    rgb;
+        bool                                    isRGB;
         const char*                             description;
     };
 
@@ -61,8 +61,8 @@ namespace NDI {
     {
         int         width;
         int         height;
-        float      pixelAspect;
-        double       hertz;
+        float       pixelAspect;
+        double      hertz;
         int         frame_rate_N;
         int         frame_rate_D;
         const char* description;
