@@ -14,7 +14,7 @@ extern "C"
     __declspec( dllexport ) void output_module_destroy( TwkApp::VideoModule* );
 #endif
 
-    TwkApp::VideoModule* output_module_create(float, int output_module_index)
+    TwkApp::VideoModule* output_module_create(float output_plugin_version, int output_module_index)
     {
         try
         {

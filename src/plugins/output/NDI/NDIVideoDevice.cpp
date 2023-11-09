@@ -15,6 +15,7 @@
 #include <TwkUtil/TwkRegEx.h>
 #include <TwkUtil/sgcHop.h>
 #include <TwkUtil/sgcHopTools.h>
+#include <array>
 #include <boost/program_options.hpp> // This has to come before the ByteSwap.h
 #include <TwkUtil/ByteSwap.h>
 #include <TwkGLF/GL.h>
@@ -23,7 +24,6 @@
 #include <cstddef>
 #include <string>
 #include <stl_ext/replace_alloc.h>
-#include <TwkGLF/GL.h>
 
 namespace NDI {
 using namespace TwkApp;
@@ -32,8 +32,6 @@ using namespace TwkUtil;
 using namespace boost::program_options;
 
 constexpr int defaultRingBufferSize = 5;
-
-static pthread_mutex_t audioMutex = PTHREAD_MUTEX_INITIALIZER;
 
 bool NDIVideoDevice::m_isInfoFeedback = false;
 
@@ -49,13 +47,13 @@ struct NDISyncSource
     const char* description;
 };
 
-static NDIDataFormat dataFormats[] = {
+static const std::vector<NDIDataFormat> dataFormats {
     {VideoDevice::RGBA8, NDIlib_FourCC_type_RGBA, true, "8-bit RGBA"},
     {VideoDevice::BGRA8, NDIlib_FourCC_type_BGRA, true, "8-bit BGRA"},
     {VideoDevice::CbY0CrY1_8_422, NDIlib_FourCC_type_UYVY, false, "8-bit UYVY"}
 };
 
-static NDIVideoFormat videoFormats[] = {
+static const std::vector<NDIVideoFormat> videoFormats {
     {1280, 720, 1.0, 50.00, 50000, 1000, "720p 50Hz"},
     {1280, 720, 1.0, 59.94, 60000, 1001, "720p 59.94Hz"},
     {1280, 720, 1.0, 60.00, 60000, 1000, "720p 60Hz"},
@@ -84,11 +82,10 @@ static NDIVideoFormat videoFormats[] = {
     {4096, 2160, 1.0, 29.97, 30000, 1001, "4K 29.97Hz"},
     {4096, 2160, 1.0, 30.00, 30000, 1000, "4K 30Hz"},
     {4096, 2160, 1.0, 50.00, 50000, 1000, "4K 50Hz"},
-    {4096, 2160, 1.0, 59.94, 50000, 1001, "4K 59.94Hz"},
-    {0, 0, 1.0, 00.00, 0, 0, nullptr},
+    {4096, 2160, 1.0, 59.94, 50000, 1001, "4K 59.94Hz"}
 };
         
-static NDIAudioFormat audioFormats[] = {
+static const std::vector<NDIAudioFormat> audioFormats {
     {48000, TwkAudio::Int16Format, 2, TwkAudio::Stereo_2, "16-bit 48kHz Stereo"},
     {48000, TwkAudio::Int32Format, 2, TwkAudio::Stereo_2, "32-bit 48kHz Stereo"},
     {48000, TwkAudio::Float32Format, 8, TwkAudio::Surround_7_1, "32-bit Float 48kHz 7.1 Surround"},
@@ -96,7 +93,7 @@ static NDIAudioFormat audioFormats[] = {
     {48000, TwkAudio::Int32Format, 16, TwkAudio::Generic_16, "32-bit 48kHz 16 channel"}
 };
 
-static NDISyncMode syncModes[] = {
+static const std::vector<NDISyncMode> syncModes {
     {0, "Free Running"}
 };
 
@@ -117,10 +114,10 @@ void NDIVideoDevice::PBOData::lockData()
     Timer timer;
     timer.start();
     pthread_mutex_lock(&mutex); 
-    Time t = timer.elapsed();
-    if (t > 0.001)
+    Time time = timer.elapsed();
+    if (time > 0.001)
     {
-        std::cout << "lockData for " << t << '\n';
+        std::cout << "lockData for " << time << '\n';
     }
 }
 
@@ -134,10 +131,10 @@ void NDIVideoDevice::PBOData::lockState()
     Timer timer;
     timer.start();
     pthread_mutex_lock(&stateMutex); 
-    Time t = timer.elapsed();
-    if (t > 0.001)
+    Time time = timer.elapsed();
+    if (time > 0.001)
     {
-        std::cout << "lockState for " << t << std::endl;
+        std::cout << "lockState for " << time << '\n';
     }
 }
 
@@ -170,9 +167,9 @@ static int pixelSizeInBytesFromNDIVideoType(const NDIlib_FourCC_video_type_e ndi
 //
 //  NDIVideoDevice
 //
-NDIVideoDevice::NDIVideoDevice(NDIModule* m,
+NDIVideoDevice::NDIVideoDevice(NDIModule* module,
                                const std::string& name)
-    : GLBindableVideoDevice(m, name, 
+    : GLBindableVideoDevice(module, name, 
                             BlockingTransfer |
                             ImageOutput | 
                             ProvidesSync | 
@@ -180,20 +177,29 @@ NDIVideoDevice::NDIVideoDevice(NDIModule* m,
                             Clock | AudioOutput |
                             NormalizedCoordinates),
       m_readyFrame(nullptr),
-      m_readyStereoFrame(nullptr),
       m_needsFrameConverter(false),
       m_hasAudio(false),
+      m_lastPboData(nullptr),
+      m_audioData{nullptr},
+      m_audioDataIndex(0),
       m_isInitialized(false),
       m_isPbos(true),
       m_pboSize(defaultRingBufferSize),
       m_videoFrameBufferSize(defaultRingBufferSize),
       m_isOpen(false),
-      m_isStereo(false),
+      m_frameWidth(0),
+      m_frameHeight(0),
       m_totalPlayoutFrames(0),
       m_internalAudioFormat(0),
       m_internalVideoFormat(0),
       m_internalDataFormat(0),
-      m_internalSyncMode(0)
+      m_internalSyncMode(0),
+      m_audioSamplesPerFrame(0),
+      m_audioChannelCount(0),
+      m_audioSampleRate(0),
+      m_audioFormat(TwkAudio::Int16Format),
+      m_textureFormat(0),
+      m_textureType(0)
 {
     m_audioFrameSizes.resize(5);
     
@@ -205,7 +211,7 @@ NDIVideoDevice::NDIVideoDevice(NDIModule* m,
     //
     for (const NDIVideoFormat& videoFormat : videoFormats)
     {
-        if (!videoFormat.description)
+        if (videoFormat.description == nullptr)
         {
             break;
         }
@@ -213,7 +219,7 @@ NDIVideoDevice::NDIVideoDevice(NDIModule* m,
 
         for (const NDIDataFormat& dataFormat : dataFormats)
         {
-            if (!dataFormat.description)
+            if (dataFormat.description == nullptr)
             {
                 break;
             }
@@ -246,24 +252,47 @@ VideoDevice::Time NDIVideoDevice::deviceLatency() const
     return Time(0);
 }
 
-size_t NDIVideoDevice::numDataFormats() const
+size_t NDIVideoDevice::numVideoFormats() const
 {
-    return m_ndiDataFormats.size();
+    return m_ndiVideoFormats.size();
 }
 
-NDIVideoDevice::DataFormat NDIVideoDevice::dataFormatAtIndex(size_t i) const
+NDIVideoDevice::VideoFormat NDIVideoDevice::videoFormatAtIndex(size_t index) const
 {
-    return DataFormat(m_ndiDataFormats[i].iformat, m_ndiDataFormats[i].description);
+    const NDIVideoFormat& videoFormat = m_ndiVideoFormats[index];
+    return {static_cast<size_t>(videoFormat.width), static_cast<size_t>(videoFormat.height), videoFormat.pixelAspect, 1.0F, static_cast<float>(videoFormat.hertz), videoFormat.description};
 }
 
-void NDIVideoDevice::setDataFormat(size_t index)
+void NDIVideoDevice::setVideoFormat(size_t index)
 {
-    m_internalDataFormat = index;
+    const size_t formatsCount = numVideoFormats();
+    if (index >= formatsCount)
+    {
+        index = formatsCount - 1;
+    }
+    m_internalVideoFormat = index;
+
+    //
+    //  Update the data formats based on the video format
+    //
+
+    m_ndiDataFormats.clear();
+
+    for (const NDIDataFormat& dataFormat : dataFormats) 
+    {
+        if (dataFormat.description == nullptr)
+        {
+            break;
+        }
+        m_ndiDataFormats.push_back(dataFormat);
+    }
+
+    m_audioFrameSizes.clear();
 }
 
-size_t NDIVideoDevice::currentDataFormat() const
+size_t NDIVideoDevice::currentVideoFormat() const
 {
-    return m_internalDataFormat;
+    return m_internalVideoFormat;
 }
 
 size_t NDIVideoDevice::numAudioFormats() const
@@ -273,14 +302,9 @@ size_t NDIVideoDevice::numAudioFormats() const
 
 NDIVideoDevice::AudioFormat NDIVideoDevice::audioFormatAtIndex(size_t index) const
 {
-    const NDIAudioFormat& audioFormat = audioFormats[index];
-    return AudioFormat(audioFormat.hertz, audioFormat.precision, audioFormat.numChannels,
-                     audioFormat.layout, audioFormat.description);
-}
-
-size_t NDIVideoDevice::currentAudioFormat() const
-{
-    return m_internalAudioFormat;
+    const NDIAudioFormat& audioFormat = audioFormats.at(index);
+    return {static_cast<Time>(audioFormat.hertz), audioFormat.precision, audioFormat.numChannels,
+            audioFormat.layout, audioFormat.description};
 }
 
 void NDIVideoDevice::setAudioFormat(size_t index)
@@ -294,59 +318,44 @@ void NDIVideoDevice::setAudioFormat(size_t index)
     m_audioFrameSizes.clear();
 }
 
-size_t NDIVideoDevice::numVideoFormats() const
+size_t NDIVideoDevice::currentAudioFormat() const
 {
-    return m_ndiVideoFormats.size();
+    return m_internalAudioFormat;
 }
 
-NDIVideoDevice::VideoFormat NDIVideoDevice::videoFormatAtIndex(size_t index) const
+size_t NDIVideoDevice::numDataFormats() const
 {
-    const NDIVideoFormat& videoFormat = m_ndiVideoFormats[index];
-    return VideoFormat(static_cast<size_t>(videoFormat.width), static_cast<size_t>(videoFormat.height), videoFormat.pixelAspect, 1.0f, static_cast<float>(videoFormat.hertz), videoFormat.description);
+    return m_ndiDataFormats.size();
 }
 
-size_t NDIVideoDevice::currentVideoFormat() const
+NDIVideoDevice::DataFormat NDIVideoDevice::dataFormatAtIndex(size_t index) const
 {
-    return m_internalVideoFormat;
+    return {m_ndiDataFormats[index].iformat, m_ndiDataFormats[index].description};
 }
 
-void NDIVideoDevice::setVideoFormat(size_t index)
+void NDIVideoDevice::setDataFormat(size_t index)
 {
-    const size_t n = numVideoFormats();
-    if (index >= n)
-    {
-        index = n - 1;
-    }
-    m_internalVideoFormat = index;
-
-    //
-    //  Update the data formats based on the video format
-    //
-
-    m_ndiDataFormats.clear();
-
-    for (const NDIDataFormat& dataFormat : dataFormats) 
-    {
-        if (!dataFormat.description)
-        {
-            break;
-        }
-        m_ndiDataFormats.push_back(dataFormat);
-    }
-
-    m_audioFrameSizes.clear();
+    m_internalDataFormat = index;
 }
 
-NDIVideoDevice::Timing NDIVideoDevice::timing() const
+size_t NDIVideoDevice::currentDataFormat() const
 {
-    const NDIVideoFormat& videoFormat = m_ndiVideoFormats[m_internalVideoFormat];
-    return NDIVideoDevice::Timing(static_cast<float>(videoFormat.hertz));
+    return m_internalDataFormat;
 }
 
-NDIVideoDevice::VideoFormat NDIVideoDevice::format() const
+size_t NDIVideoDevice::numSyncSources() const
 {
-    const NDIVideoFormat& videoFormat = m_ndiVideoFormats[m_internalVideoFormat];
-    return NDIVideoDevice::VideoFormat(static_cast<size_t>(videoFormat.width), static_cast<size_t>(videoFormat.height), videoFormat.pixelAspect, 1.0f, static_cast<float>(videoFormat.hertz), videoFormat.description);
+    return 0;
+}
+
+NDIVideoDevice::SyncSource NDIVideoDevice::syncSourceAtIndex(size_t index) const
+{
+    return {};
+}
+
+size_t NDIVideoDevice::currentSyncSource() const
+{
+    return 0;
 }
 
 size_t NDIVideoDevice::numSyncModes() const
@@ -356,8 +365,8 @@ size_t NDIVideoDevice::numSyncModes() const
 
 NDIVideoDevice::SyncMode NDIVideoDevice::syncModeAtIndex(size_t index) const
 {
-    const NDISyncMode& m = syncModes[index];
-    return SyncMode(m.description);
+    const NDISyncMode& mode = syncModes.at(index);
+    return {mode.description};
 }
 
 void NDIVideoDevice::setSyncMode(size_t index)
@@ -370,28 +379,26 @@ size_t NDIVideoDevice::currentSyncMode() const
     return m_internalSyncMode;
 }
 
-size_t NDIVideoDevice::numSyncSources() const
+NDIVideoDevice::Timing NDIVideoDevice::timing() const
 {
-    return 0;
+    const NDIVideoFormat& videoFormat = m_ndiVideoFormats[m_internalVideoFormat];
+    return {static_cast<float>(videoFormat.hertz)};
 }
 
-NDIVideoDevice::SyncSource NDIVideoDevice::syncSourceAtIndex(size_t) const
+NDIVideoDevice::VideoFormat NDIVideoDevice::format() const
 {
-    return SyncSource();
-}
-
-size_t NDIVideoDevice::currentSyncSource() const
-{
-    return 0;
+    const NDIVideoFormat& videoFormat = m_ndiVideoFormats[m_internalVideoFormat];
+    return {static_cast<size_t>(videoFormat.width), static_cast<size_t>(videoFormat.height), videoFormat.pixelAspect, 1.0F, static_cast<float>(videoFormat.hertz), videoFormat.description};
 }
 
 void NDIVideoDevice::audioFrameSizeSequence(AudioFrameSizeVector& fsizes) const
 {
-    m_audioFrameSizes.resize(5);
-    fsizes.resize(5);
-    for (size_t i = 0; i < 5; i++)
+    const int frameSizes = 5;
+    m_audioFrameSizes.resize(frameSizes);
+    fsizes.resize(frameSizes);
+    for (size_t i = 0; i < frameSizes; i++)
     {
-        m_audioFrameSizes[i] = m_audioSamplesPerFrame;
+        m_audioFrameSizes[i] = static_cast<unsigned long>(m_audioSamplesPerFrame);
         fsizes[i] = m_audioFrameSizes[i];
     }
 }
@@ -407,7 +414,7 @@ void NDIVideoDevice::initialize()
 }
 
 namespace {
-    std::string mapToEnvVar(std::string name)
+    std::string mapToEnvVar(const std::string& name)
     {
         if (name == "RV_NDI_HELP")
         {
@@ -468,7 +475,7 @@ void NDIVideoDevice::open(const StringVector& args)
 
     m_isInfoFeedback = variables.count("verbose") > 0;
     
-    if (variables.count("ring-buffer-size"))
+    if (variables.count("ring-buffer-size") != 0)
     {
         int ringBufferSize = variables["ring-buffer-size"].as<int>();
         m_pboSize = static_cast<size_t>(ringBufferSize);
@@ -476,15 +483,15 @@ void NDIVideoDevice::open(const StringVector& args)
     }
 
     bool PBOsOK = true;
-    if (variables.count("method"))
+    if (variables.count("method") != 0)
     {
-        std::string s = variables["method"].as<std::string>();
+        std::string string = variables["method"].as<std::string>();
 
-        if (s == "ipbo")
+        if (string == "ipbo")
         {
             PBOsOK = true; 
         }
-        else if (s == "basic") 
+        else if (string == "basic") 
         {
             PBOsOK = false; 
         }
@@ -505,7 +512,6 @@ void NDIVideoDevice::open(const StringVector& args)
     m_frameCount         = 0;
     m_totalPlayoutFrames = 0;
     m_lastPboData        = nullptr;
-    m_secondLastPboData  = nullptr;
     
     // dynamically determine what pixel formats are supported based on the 
     // desired video format
@@ -513,7 +519,7 @@ void NDIVideoDevice::open(const StringVector& args)
 
     for (const NDIDataFormat& dataFormat : dataFormats)
     {
-        if (!dataFormat.description)
+        if (dataFormat.description == nullptr)
         {
             break;
         }
@@ -527,26 +533,25 @@ void NDIVideoDevice::open(const StringVector& args)
     const NDIDataFormat& dataFormat = m_ndiDataFormats[m_internalDataFormat];
     const std::string& dname = dataFormat.description;
 
-    const NDIAudioFormat& audioFormat = audioFormats[m_internalAudioFormat];
-    m_audioChannelCount = audioFormat.numChannels;
+    const NDIAudioFormat& audioFormat = audioFormats.at(m_internalAudioFormat);
+    m_audioChannelCount = static_cast<float>(audioFormat.numChannels);
     m_audioFormat = audioFormat.precision;
 
     GLenumPair epair = TwkGLF::textureFormatFromDataFormat(dataFormat.iformat);
     m_textureFormat = epair.first;
     m_textureType = epair.second;
 
-    m_isStereo = dname.find("Stereo") != std::string::npos;
-    m_videoFrameBufferSize = m_isStereo ? m_pboSize * 2 : m_pboSize;
+    m_videoFrameBufferSize = m_pboSize;
 
 	m_ndiVideoFrame.xres = videoFormat.width;
     m_ndiVideoFrame.yres = videoFormat.height;
 	m_ndiVideoFrame.FourCC = dataFormat.ndiFormat;
-    m_ndiVideoFrame.frame_rate_N = videoFormat.frame_rate_N;
-    m_ndiVideoFrame.frame_rate_D = videoFormat.frame_rate_D;
+    m_ndiVideoFrame.frame_rate_N = static_cast<int>(videoFormat.frame_rate_N);
+    m_ndiVideoFrame.frame_rate_D = static_cast<int>(videoFormat.frame_rate_D);
 
-    m_audioSampleRate = static_cast<unsigned long>(audioFormat.hertz);
-    const float frameDuration = static_cast<float>(videoFormat.frame_rate_D) / videoFormat.frame_rate_N;
-    m_audioSamplesPerFrame = static_cast<unsigned long>(static_cast<double>(m_audioSampleRate * frameDuration) + 0.5);
+    m_audioSampleRate = static_cast<float>(audioFormat.hertz);
+    const float frameDuration = videoFormat.frame_rate_D / videoFormat.frame_rate_N;
+    m_audioSamplesPerFrame = m_audioSampleRate * frameDuration + 0.5;
 
     // Allocater audio buffers
     if (m_audioFormat == TwkAudio::Int16Format)
@@ -601,7 +606,7 @@ void NDIVideoDevice::open(const StringVector& args)
         {
             bps = 2 * m_frameWidth;
         }
-        // TODO: Allocate output frame
+
         outputFrame = new NDIVideoFrame[m_frameHeight * bps];
         std::memset(outputFrame, 128, m_frameHeight * bps);
         m_DLOutputVideoFrameQueue.push_back(outputFrame);
@@ -621,7 +626,7 @@ void NDIVideoDevice::open(const StringVector& args)
 
     // Create an NDI sender 
     m_ndiSender = NDIlib_send_create();
-	if (!m_ndiSender)
+	if (m_ndiSender == nullptr)
     {
         std::cout << "ERROR: Could not create NDI sender.\n";
     }
@@ -637,9 +642,8 @@ void NDIVideoDevice::close()
         
         unbind();
 
-        int rc = pthread_mutex_unlock(&audioMutex);
         m_hasAudio = false;
-        if (m_audioData[0]) 
+        if (m_audioData[0] != nullptr) 
         {
             if (m_audioFormat == TwkAudio::Int16Format)
             {
@@ -651,7 +655,7 @@ void NDIVideoDevice::close()
             } 
             m_audioData[0] = nullptr;
         }
-        if (m_audioData[1]) 
+        if (m_audioData[1] != nullptr) 
         {
             if (m_audioFormat == TwkAudio::Int16Format)
             {
@@ -663,7 +667,6 @@ void NDIVideoDevice::close()
             }
             m_audioData[1] = nullptr;
         }
-        rc = pthread_mutex_unlock(&audioMutex);
         m_needsFrameConverter = false;
 
         for (const auto& frame : m_DLOutputVideoFrameQueue) {
@@ -680,7 +683,7 @@ void NDIVideoDevice::close()
       
         m_DLReadbackVideoFrameQueue.clear();
 
-        if (m_ndiSender)
+        if (m_ndiSender != nullptr)
         {
             NDIlib_send_destroy(m_ndiSender);
             m_ndiSender = nullptr;
@@ -690,46 +693,33 @@ void NDIVideoDevice::close()
     TwkGLF::GLBindableVideoDevice::close();
 }
 
-bool NDIVideoDevice::isStereo() const
-{
-    return m_isStereo;
-}
-
 bool NDIVideoDevice::isOpen() const
 {
     return m_isOpen;
 }
 
-void NDIVideoDevice::clearCaches() const { }
-
-bool NDIVideoDevice::isDualStereo() const
-{
-    return isStereo();
-}
+void NDIVideoDevice::clearCaches() const {}
 
 void NDIVideoDevice::transferAudio(void* data, size_t) const
 {
-    int rc = pthread_mutex_lock(&audioMutex);
-    if (!data) 
+    if (data == nullptr) 
     {
         m_hasAudio = false; 
-        rc = pthread_mutex_unlock(&audioMutex);  
         return; 
     }
     m_hasAudio = true;
-    rc = pthread_mutex_unlock(&audioMutex);  
     
-    size_t b = 2;
+    size_t bytes = 2;
     if (m_audioFormat == TwkAudio::Int32Format || m_audioFormat == TwkAudio::Float32Format )
     {
-        b = 4;
+        bytes = 4;
     }
 
-    std::memcpy(m_audioData[m_audioDataIndex], data, b * m_audioSamplesPerFrame * m_audioChannelCount);
+    std::memcpy(m_audioData[m_audioDataIndex], data, bytes * m_audioSamplesPerFrame * m_audioChannelCount);
     m_audioDataIndex = (m_audioDataIndex + 1) % 2;
 }
 
-bool NDIVideoDevice::transferChannel(size_t n, const GLFBO* fbo) const
+bool NDIVideoDevice::transferChannel(size_t index, const GLFBO* fbo) const
 {
     HOP_PROF_FUNC();
 
@@ -749,23 +739,14 @@ bool NDIVideoDevice::transferChannel(size_t n, const GLFBO* fbo) const
 
     if (m_isPbos)
     {
-        transferChannelPBO(n, fbo, outputVideoFrame, readbackVideoFrame);
+        transferChannelPBO(index, fbo, outputVideoFrame, readbackVideoFrame);
     }
     else
     {
-        transferChannelReadPixels(n, fbo, outputVideoFrame, readbackVideoFrame);
+        transferChannelReadPixels(index, fbo, outputVideoFrame, readbackVideoFrame);
     }
 
-    if (n == 0 && !m_isStereo)
-    { 
-        // non stereo, then n is always 0
-        m_readyFrame = outputVideoFrame;
-    }
-    else if (n == 1) // in case of stereo, ready frame is updated when right eye is transfered
-    {
-        // TODO: Add stereo support
-        m_readyStereoFrame = outputVideoFrame;
-    }
+    m_readyFrame = outputVideoFrame;
 
     // Set the new data pointer and calculate line stride
     // Note that the NDI SDK is expecting a top-down image whereas OpenGL is 
@@ -784,11 +765,9 @@ bool NDIVideoDevice::transferChannel(size_t n, const GLFBO* fbo) const
         std::memcpy(m_ndiVideoFrame.p_data + flippedRow * lineStrideInBytes, m_readyFrame + row * lineStrideInBytes, lineStrideInBytes);
     }
 
-    int rc = pthread_mutex_lock(&audioMutex);
 
     if (m_hasAudio)
     {
-        rc = pthread_mutex_unlock(&audioMutex);
         int index = (m_audioDataIndex == 1) ? 0 : 1;
         if (m_audioFormat == TwkAudio::Int16Format)
         {
@@ -810,12 +789,10 @@ bool NDIVideoDevice::transferChannel(size_t n, const GLFBO* fbo) const
     // Send the video frame
     NDIlib_send_send_video_v2(m_ndiSender, &m_ndiVideoFrame);
 
-    rc = pthread_mutex_unlock(&audioMutex);
-
     return true;
 }
 
-void NDIVideoDevice::transferChannelPBO(size_t n,
+void NDIVideoDevice::transferChannelPBO(size_t index,
                                    const GLFBO* fbo,
                                    NDIVideoFrame* outputVideoFrame,
                                    NDIVideoFrame*) const
@@ -824,10 +801,6 @@ void NDIVideoDevice::transferChannelPBO(size_t n,
     HOP_PROF_FUNC();
     
     PBOData* lastPboData = m_lastPboData; 
-    if (m_isStereo && n == 0)
-    {
-        lastPboData = m_secondLastPboData;
-    }
 
     const NDIDataFormat& dataFormat = m_ndiDataFormats[m_internalDataFormat];
 
@@ -922,7 +895,7 @@ void NDIVideoDevice::transferChannelPBO(size_t n,
 
         // next pbo read
         PBOData* pboData = m_pboQueue.front();
-        if (!pboData) 
+        if (pboData == nullptr) 
         {
             std::cerr << "ERROR: pboData is NULL!\n";
         }
@@ -950,14 +923,8 @@ void NDIVideoDevice::transferChannelPBO(size_t n,
                     textureTypeToUse,
                     nullptr); TWK_GLDEBUG;
 
-        if (m_isStereo && n == 0)
-        {
-            m_secondLastPboData = pboData;
-        }
-        else
-        {
-            m_lastPboData = pboData;
-        }
+
+        m_lastPboData = pboData;
 
         glBindBuffer(GL_PIXEL_PACK_BUFFER_ARB, 0);
         HOP_CALL( glFinish(); )  
@@ -971,15 +938,13 @@ void NDIVideoDevice::transferChannelReadPixels(size_t,
 {
     HOP_PROF_FUNC();
 
-    void* pFrame;
+    void* pFrame = nullptr;
     if (m_needsFrameConverter)
     {
-        // TODO: readbackVideoFrame->GetBytes(&pFrame);
         pFrame = readbackVideoFrame;
     }
-    else 
+    else
     {
-        // TODO: outputVideoFrame->GetBytes(&pFrame);
         pFrame = outputVideoFrame;
     }
 
@@ -999,8 +964,7 @@ void NDIVideoDevice::transferChannelReadPixels(size_t,
         TwkUtil::Timer converterTimer;
         converterTimer.start();
     
-        void* outData;
-        // TODO: outputVideoFrame->GetBytes(&outData);
+        void* outData = nullptr;
         outData = outputVideoFrame;
         if (dataFormat.iformat == VideoDevice::CbY0CrY1_8_422)
         {
@@ -1016,7 +980,6 @@ void NDIVideoDevice::transferChannelReadPixels(size_t,
                                    reinterpret_cast<uint32_t*>(pFrame), 
                                    reinterpret_cast<uint32_t*>(outData),
                                    m_frameWidth * sizeof(uint32_t),
-                                   // TODO: static_cast<size_t>(outputVideoFrame->GetRowBytes()) 
                                    m_frameWidth * sizeof(uint32_t)
                                    );
         }
@@ -1050,7 +1013,7 @@ bool NDIVideoDevice::readyForTransfer() const
     return true;
 }
 
-void NDIVideoDevice::transfer2(const GLFBO* fbo, const GLFBO* fbo2) const
+void NDIVideoDevice::transfer2(const GLFBO* fbo1, const GLFBO* fbo2) const
 {
     if (!m_isOpen)
     {
@@ -1063,11 +1026,11 @@ void NDIVideoDevice::transfer2(const GLFBO* fbo, const GLFBO* fbo2) const
         // the fbo to be read into the next pbo; hence we call transferChannel()
         // with the right eye fbo first.
         transferChannel(0, fbo2);
-        transferChannel(1, fbo);
+        transferChannel(1, fbo1);
     }
     else
     {
-        transferChannel(0, fbo);
+        transferChannel(0, fbo1);
         transferChannel(1, fbo2);
     }
     
@@ -1079,14 +1042,14 @@ void NDIVideoDevice::unbind() const
     if (m_isPbos)
     {
         for (const auto& pbo : m_pboQueue) {
-            PBOData* p = pbo;
-            if (p->state == PBOData::NeedsUnmap)
+            PBOData* data = pbo;
+            if (data->state == PBOData::NeedsUnmap)
             {
-                glBindBuffer(GL_PIXEL_PACK_BUFFER_ARB, p->globject); TWK_GLDEBUG;
+                glBindBuffer(GL_PIXEL_PACK_BUFFER_ARB, data->globject); TWK_GLDEBUG;
                 glUnmapBuffer(GL_PIXEL_PACK_BUFFER_ARB); TWK_GLDEBUG;
                 glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
             }
-            glDeleteBuffers(1, &(p->globject)); TWK_GLDEBUG;
+            glDeleteBuffers(1, &(data->globject)); TWK_GLDEBUG;
             delete pbo;
         }
         
@@ -1098,11 +1061,11 @@ void NDIVideoDevice::bind(const GLVideoDevice*) const
 {
     if (m_isPbos)
     {
-        size_t num = m_isStereo ? m_pboSize * 2 : m_pboSize;
+        size_t num = m_pboSize;
 
-        for (size_t q = 0; q < num; q++)
+        for (size_t i = 0; i < num; i++)
         {
-            GLuint glObject;
+            GLuint glObject = 0;
             glGenBuffers(1, &glObject); TWK_GLDEBUG;
             glBindBuffer(GL_PIXEL_PACK_BUFFER_ARB, glObject); TWK_GLDEBUG;
             glBufferData(GL_PIXEL_PACK_BUFFER_ARB, static_cast<long>(m_frameWidth * 4 * m_frameHeight), nullptr, GL_STATIC_READ); TWK_GLDEBUG; // read back is always in 4 bytes
@@ -1115,9 +1078,9 @@ void NDIVideoDevice::bind(const GLVideoDevice*) const
     resetClock();
 }
 
-void  NDIVideoDevice::bind2(const GLVideoDevice* d, const GLVideoDevice*) const
+void  NDIVideoDevice::bind2(const GLVideoDevice* device, const GLVideoDevice*) const
 {
-    bind(d);
+    bind(device);
 }
 
 } // NDI

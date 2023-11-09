@@ -17,14 +17,14 @@ class NDIModule : public TwkApp::VideoModule
 {
     public:
         NDIModule();
-        virtual ~NDIModule() override;
+        ~NDIModule() override;
 
-        virtual std::string name() const override;
-        virtual std::string SDKIdentifier() const override;
-        virtual std::string SDKInfo() const override;
-        virtual void open() override;
-        virtual void close() override;
-        virtual bool isOpen() const override;
+        [[nodiscard]] std::string name() const override;
+        [[nodiscard]] std::string SDKIdentifier() const override;
+        [[nodiscard]] std::string SDKInfo() const override;
+        void open() override;
+        void close() override;
+        [[nodiscard]] bool isOpen() const override;
 };
 
 } // NDI
