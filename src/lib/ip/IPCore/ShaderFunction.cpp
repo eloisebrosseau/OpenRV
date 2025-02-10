@@ -65,7 +65,8 @@ namespace IPCore
             {"sampler3D", Symbol::Sampler3DType},
             {"inputImage", Symbol::InputImageType},
             {"outputImage", Symbol::OutputImageType},
-            {0, Symbol::VoidType}};
+            {"fragmentPosition", Symbol::FragmentPositionType},
+            {nullptr, Symbol::VoidType}};
 
         namespace
         {
@@ -167,6 +168,7 @@ namespace IPCore
             , m_hash(0)
             , m_usesOutputSize(false)
             , m_usesOutputST(false)
+            , m_usesFragmentPosition(false)
             , m_inline(type == Filter || type == MorphologicalFilter)
         {
             initGLSLVersion();
@@ -191,6 +193,7 @@ namespace IPCore
             , m_hash(0)
             , m_usesOutputSize(false)
             , m_usesOutputST(false)
+            , m_usesFragmentPosition(false)
             , m_inline(type == Filter || type == MorphologicalFilter)
         {
             initGLSLVersion();
@@ -512,7 +515,8 @@ namespace IPCore
 
                     pp.special = (name == "time" && ptype == "float")
                                  || (name == "_offset" && ptype == "vec2")
-                                 || ptype == "outputImage";
+                                 || ptype == "outputImage"
+                                 || ptype == "fragmentPosition";
                     pp.name = name;
                     pp.type = ptype;
                     pp.requiresInline = false;
@@ -733,6 +737,85 @@ namespace IPCore
                         {
                             re = regex(",\\s*const\\s+in\\s+outputImage\\s+"
                                        + p.name + "\\b");
+                        }
+                        m_sourceCode = regex_replace(m_sourceCode, re, "");
+                    }
+
+                    else if (p.type == "fragmentPosition")
+                    {
+                        if (!p.q_in || !p.q_const)
+                        {
+                            //
+                            //  do not allow fragmentPosition type to be an out
+                            //  or non-constant. force it to be and then notify
+                            //  user (shader writer)
+                            //
+                            //  NOTE: its ok to throw here. Throwing here will
+                            //  unwind past the Function constructor and back
+                            //  to whoever tried to make then function. This
+                            //  is expected behavior.
+                            //
+
+                            TWK_THROW_EXC_STREAM(
+                                "fragmentPosition argument \'"
+                                << p.name
+                                << "\' must have qualifier \'const in\'");
+                        }
+
+                        //
+                        //  note "fragmentPosition" is a special type that
+                        //  shader writers need to be aware of. remove
+                        //  "fragmentPosition foo" from parameter list cause we
+                        //  don't need it. replace foo.size with _windowSize,
+                        //  foo.ABC (where ABC is any legal swizzle op for a
+                        //  vec3) with _fragPosition.
+                        //
+
+                        //  If you want to test those regular expressions, this
+                        //  web site has very useful tools :
+                        //  https://regex101.com/
+
+                        smatch sm;
+                        regex regf("\\b(" + p.name
+                                   + ")\\s*\\.\\s*([stp]{1,3}|[xyz]{1,3}|[rgb]{"
+                                     "1,3})\\b");
+
+                        //
+                        //  look for occurence of foo.size or swizzle and
+                        //  replace with corresponding symbols.
+                        //
+
+                        if (regex_search(m_sourceCode, sm, regf))
+                        {
+                            m_usesFragmentPosition = true;
+
+                            //
+                            //  Swap in whatever swizzle the user might have
+                            //  done on the outputImage coords when
+                            //  substituting in fragCoord.
+                            //
+
+                            m_sourceCode = regex_replace(m_sourceCode, regf,
+                                                         "_fragPosition.\\2");
+                            m_inline = true;
+                        }
+
+                        //
+                        //  remove this parameter
+                        //
+
+                        regex re;
+
+                        if (i == 0)
+                        {
+                            re = regex("\\s*const\\s+in\\s+fragmentPosition\\s+"
+                                       + p.name + "\\s*,");
+                        }
+                        else
+                        {
+                            re =
+                                regex(",\\s*const\\s+in\\s+fragmentPosition\\s+"
+                                      + p.name + "\\b");
                         }
 
                         m_sourceCode = regex_replace(m_sourceCode, re, "");
@@ -1053,16 +1136,23 @@ namespace IPCore
 
             bool first = true;
 
-            for (size_t q = 0; q < symbols.size(); q++)
+            for (const auto* symbol : symbols)
             {
-                if (symbols[q]->type() == Symbol::InputImageType
-                    || symbols[q]->type() == Symbol::OutputImageType)
+                // those symbols get passed from the vertex shader to the
+                // fragment shader using the "in"/"out" storage qualifiers, so
+                // we don't have to include them in the function's prototype.
+                if (symbol->type() == Symbol::InputImageType
+                    || symbol->type() == Symbol::OutputImageType
+                    || symbol->type() == Symbol::FragmentPositionType)
+                {
                     continue;
+                }
+
                 if (!first)
                     code << ", ";
                 first = false;
-                code << symbols[q]->glslQualifierName() << " "
-                     << symbols[q]->glslTypeName();
+                code << symbol->glslQualifierName() << " "
+                     << symbol->glslTypeName();
             }
 
             code << ")";
@@ -1637,6 +1727,21 @@ namespace IPCore
                         glsl = regex_replace(glsl, outSTRE, "_outST.\\1");
 
                         str << "uniform vec2 _outST;" << endl;
+                        lineCount++;
+                    }
+
+                    if (m_usesFragmentPosition)
+                    {
+                        //
+                        //  OUT.st -> _outFragPos.st
+                        //
+
+                        regex outSTRE("\\b" + name
+                                      + "\\s*\\.\\s*([stp]{1,3}|[xyz]{1,3}|["
+                                        "rgb]{1,3})\\b");
+                        glsl = regex_replace(glsl, outSTRE, "_outFragPos.\\1");
+
+                        str << "uniform vec2 _outFragPos;" << endl;
                         lineCount++;
                     }
 
