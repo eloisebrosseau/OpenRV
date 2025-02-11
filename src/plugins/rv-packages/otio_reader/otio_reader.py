@@ -445,6 +445,13 @@ def _create_media(media_ref, trimmed_range, context=None):
                 context,
             )
         ]
+
+    elif isinstance(media_ref, otio.schema.GeneratorReference):
+        if media_ref.generator_kind == "solid":
+            color_parameters = media_ref.parameters.get("color")
+            kind = f"solid,{color_parameters}"
+            return [_create_movieproc(media_range, kind)]
+
     return [_create_movieproc(media_range, "smptebars")]
 
 
@@ -557,9 +564,11 @@ def _create_item(it, context=None):
         context,
         src=active_src,
         source_group=commands.nodeGroup(active_src),
-        switch_group=src_or_switch_group
-        if commands.nodeType(src_or_switch_group) == "RVSwitchGroup"
-        else None,
+        switch_group=(
+            src_or_switch_group
+            if commands.nodeType(src_or_switch_group) == "RVSwitchGroup"
+            else None
+        ),
     ):
         if context.get("transition"):
             _add_transition_timings(it, range_to_read, src_or_switch_group)
@@ -659,7 +668,7 @@ def _add_source_bounds(media_ref, src, context=None):
         height = media_info["height"]
         aspect_ratio = media_info["width"] / height
     except Exception:
-        logging.exception("Unable to determine aspect ratio, using default value of 16:9")
+        logging.info("Unable to determine aspect ratio, using default value of 16:9")
         aspect_ratio = 1920 / 1080
 
     translate = bounds.center() * global_scale - global_translate
