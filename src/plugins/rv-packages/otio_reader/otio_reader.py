@@ -67,8 +67,11 @@ def read_otio_string(otio_string: str, host_prefix: str | None = None) -> object
     Returns the top level node created that represents this otio
     timeline.
     """
-    otio_obj = otio.adapters.read_from_string(otio_string)
-    timeline = otio_obj["otio"]
+    try:
+        otio_obj = otio.adapters.read_from_string(otio_string)
+        timeline = otio_obj["otio"]
+    except Exception as e:
+        logging.error(f"Unable to deserialize the OTIO string: {e}")
 
     context = {"sg_url": host_prefix} if host_prefix else None
 
@@ -524,7 +527,10 @@ def _get_media_path(target_url: str, context: dict | None = None) -> str:
     context = context or {}
 
     if "sg_url" in context:
-        return context.get("sg_url") + target_url
+        if context.get("sg_url") in target_url:
+            return target_url
+        else:
+            return context.get("sg_url") + target_url
 
     if not os.path.isabs(target_url):
         # if this is a relative file path, assume relative to the otio file
