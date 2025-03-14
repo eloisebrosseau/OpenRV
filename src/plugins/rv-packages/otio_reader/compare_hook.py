@@ -160,6 +160,7 @@ def hook_function(
                     "inputAngularMaskPivotX": [pivot_x],
                     "inputAngularMaskPivotY": [pivot_y],
                     "inputAngularMaskAngleInRadians": [angle_in_radians],
+                    "inputReverseAngularMask": [is_swapped],
                 },
             )
 
