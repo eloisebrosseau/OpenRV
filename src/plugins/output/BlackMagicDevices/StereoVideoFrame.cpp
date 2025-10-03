@@ -46,21 +46,15 @@ HRESULT StereoVideoFrame::Provider::QueryInterface(REFIID iid, LPVOID* ppv)
 
 ULONG StereoVideoFrame::Provider::AddRef()
 {
-#ifdef PLATFORM_WINDOWS
-    return _InterlockedIncrement((volatile long*)&m_refCount);
-#else
     return ++m_refCount;
 #endif
 }
 
-ULONG StereoVideoFrame::Provider::Release()
+åå
+
+    ULONG
+    StereoVideoFrame::Provider::Release()
 {
-#ifdef PLATFORM_WINDOWS
-    ULONG newRefValue = _InterlockedDecrement((volatile long*)&m_refCount);
-    if (!newRefValue)
-        delete this;
-    return newRefValue;
-#else
     ULONG refCount = --m_refCount;
     if (refCount == 0)
     {
@@ -122,21 +116,12 @@ HRESULT StereoVideoFrame::QueryInterface(REFIID iid, LPVOID* ppv)
 
 ULONG StereoVideoFrame::AddRef()
 {
-#ifdef PLATFORM_WINDOWS
-    return _InterlockedIncrement((volatile long*)&m_refCount);
-#else
     return ++m_refCount;
 #endif
 }
 
 ULONG StereoVideoFrame::Release()
 {
-#ifdef PLATFORM_WINDOWS
-    ULONG newRefValue = _InterlockedDecrement((volatile long*)&m_refCount);
-    if (!newRefValue)
-        delete this;
-    return newRefValue;
-#else
     ULONG refCount = --m_refCount;
     if (refCount == 0)
     {
