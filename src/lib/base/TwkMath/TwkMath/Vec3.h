@@ -96,6 +96,9 @@ namespace TwkMath
         //**************************************************************************
         // ASSIGNMENT OPERATORS
         //**************************************************************************
+        // Copy assignment operator. Required because we have a user-defined copy constructor (Rule of Five)
+        Vec3<T>& operator=(const Vec3<T>& copy) = default;
+
         // Single valued assignment. All elements set to value
         template <typename S> Vec3<T>& operator=(const S& value)
         {
