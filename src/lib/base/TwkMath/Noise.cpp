@@ -159,9 +159,6 @@ namespace TwkMath
         static inline int getIndex(int x, int y, int z) { return getIndex(getIndex(getIndex(x) + y) + z); }
 
         //******************************************************************************
-        static inline int getIndex(int x, int y, int z, int w) { return getIndex(getIndex(getIndex(getIndex(x) + y) + z) + w); }
-
-        //******************************************************************************
         static inline float cubic(float t)
         {
             //     return ( 3.0f - 2.0f * t ) * t * t;
