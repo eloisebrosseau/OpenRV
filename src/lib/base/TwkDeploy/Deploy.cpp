@@ -48,7 +48,7 @@ string TWK_DEPLOY_SHORT_APP_NAME(void) { return "rv"; }
 
 void TWK_DEPLOY_SET_HOME(const char* dir) { homeloc = strdup(dir); }
 
-void TWK_DEPLOY_SEGV(int sig)
+void TWK_DEPLOY_SEGV(int /*sig*/)
 {
     fprintf(stderr, "ERROR: segmentation violation\n");
 
@@ -61,7 +61,7 @@ void TWK_DEPLOY_SHOW_COPYRIGHT_BANNER(ostream& o)
     o << endl;
 }
 
-void TWK_DEPLOY_SHOW_LOCAL_BANNER(ostream& o)
+void TWK_DEPLOY_SHOW_LOCAL_BANNER(ostream& /*o*/)
 {
     // nothing
 }
