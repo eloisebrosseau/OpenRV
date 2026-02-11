@@ -757,7 +757,7 @@ namespace TwkMath
     // FUNCTIONS WHICH OPERATE ON BOXES
     //******************************************************************************
     //******************************************************************************
-    template <class VEC> inline typename Box<VEC>::size_type dimension(const Box<VEC>& b) { return VEC::dimension(); }
+    template <class VEC> inline typename Box<VEC>::size_type dimension(const Box<VEC>& /*b*/) { return VEC::dimension(); }
 
     //******************************************************************************
     template <class VEC> inline VEC size(const Box<VEC>& b) { return b.size(); }
