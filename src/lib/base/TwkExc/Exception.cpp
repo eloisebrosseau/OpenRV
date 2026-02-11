@@ -7,6 +7,7 @@
 //******************************************************************************
 
 #include <TwkExc/Exception.h>
+#include <cstddef>
 
 namespace TwkExc
 {
@@ -54,7 +55,7 @@ namespace TwkExc
 
         o << "ERROR: ";
 
-        for (int i = 0; i < s.size(); i++)
+        for (size_t i = 0; i < s.size(); i++)
         {
             if (s[i] == '\n' || s[i] == '\r')
             {

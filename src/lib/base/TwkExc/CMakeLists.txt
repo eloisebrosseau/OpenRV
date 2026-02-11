@@ -31,4 +31,16 @@ IF(RV_TARGET_WINDOWS)
   )
 ENDIF()
 
+IF(MSVC)
+  TARGET_COMPILE_OPTIONS(
+    ${_target}
+    PRIVATE /W4
+  )
+ELSE()
+  TARGET_COMPILE_OPTIONS(
+    ${_target}
+    PRIVATE -Wall -Wextra -Wpedantic -Werror
+  )
+ENDIF()
+
 RV_STAGE(TYPE "SHARED_LIBRARY" TARGET ${_target})
