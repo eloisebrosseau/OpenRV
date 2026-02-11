@@ -12,8 +12,8 @@
 namespace RVMath
 {
     LogC::LogC(const Param& param, float asa)
-        : m_Param(param)
-        , m_ExposureGain(0.0f)
+        : m_ExposureGain(0.0f)
+        , m_Param(param)
     {
         m_LinSlope = 1 / (param.cutPoint * log(10.0f));
         m_LinOffset = log10(param.cutPoint) - m_LinSlope * param.cutPoint;
