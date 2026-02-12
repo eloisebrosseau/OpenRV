@@ -96,7 +96,7 @@ namespace stl_ext
         {
         public:
             iterator()
-                : _index(-1)
+                : _index(0)
                 , _i()
                 , _arena(0)
             {
@@ -127,7 +127,7 @@ namespace stl_ext
             void next();
 
         private:
-            int _index;
+            size_t _index;
             allocator::iterator _i;
             block_alloc_arena* _arena;
         };
