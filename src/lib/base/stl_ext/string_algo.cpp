@@ -109,9 +109,9 @@ namespace stl_ext
 
         unsigned long h = 0, g;
 
-        for (int i = 0; i < s.size(); i++)
+        for (char i : s)
         {
-            h = (h << 4) + s[i];
+            h = (h << 4) + i;
             if ((g = h & 0xf0000000))
                 h ^= g >> 24;
             h &= ~g;
