@@ -120,7 +120,7 @@ namespace stl_ext
                 if (int err = _api.join(_join_thread, NULL))
                 {
                     pthread_t thread = pthread_self();
-                    printf("~thread_group: %p -- join: %s", thread, strerror(err));
+                    printf("~thread_group: %p -- join: %s", (void*)thread, strerror(err));
                 }
             }
             /* AJG - This WILL break something */
@@ -178,7 +178,8 @@ namespace stl_ext
 #ifndef PLATFORM_LINUX
             struct timeval tv;
 
-            fprintf(stderr, "%d %d %p/%p/%d/%lu: ", (int)tv.tv_sec, (int)tv.tv_usec, this, thread, worker_num + 1, _threads.size());
+            fprintf(stderr, "%d %d %p/%p/%d/%lu: ", (int)tv.tv_sec, (int)tv.tv_usec, (void*)this, (void*)thread, worker_num + 1,
+                    _threads.size());
 #endif
             vfprintf(stderr, c, ap);
             fprintf(stderr, "\n");
@@ -248,7 +249,7 @@ namespace stl_ext
             pthread_attr_setstacksize(&_thread_attr, _default_stack_size * stack_mult);
 
             if (funcs)
-                assert(funcs->size() == num_to_add);
+                assert(funcs->size() == static_cast<size_t>(num_to_add));
             if (funcs)
             {
                 debug("add_thread: funcs size %d", funcs->size());
@@ -257,7 +258,7 @@ namespace stl_ext
             {
                 debug("add_thread: funcs is NULL");
             }
-            for (int i = s; i < _threads.size(); i++)
+            for (size_t i = s; i < _threads.size(); i++)
             {
                 thread_package& pack = _packages[i];
                 pack.group = this;
@@ -267,7 +268,7 @@ namespace stl_ext
                 memset(&_threads[i], 0, sizeof(pthread_t));
                 if (int err = _api.create(&_threads[i], &_thread_attr, thread_main, &pack))
                 {
-                    printf("add_thread: Error trying to create thread %d: %d", i, err);
+                    printf("add_thread: Error trying to create thread %zu: %d", i, err);
                     abort();
                 }
                 _num_threads++;
@@ -284,7 +285,7 @@ namespace stl_ext
         if (int err = pthread_mutex_lock(&mutex))
         {
             pthread_t thread = pthread_self();
-            printf("%p -- unable to lock: %s", thread, strerror(err));
+            printf("%p -- unable to lock: %s", (void*)thread, strerror(err));
             fflush(stdout);
         }
     }
@@ -294,7 +295,7 @@ namespace stl_ext
         if (int err = pthread_mutex_unlock(&mutex))
         {
             pthread_t thread = pthread_self();
-            printf("%p -- unable to unlock: %s", thread, strerror(err));
+            printf("%p -- unable to unlock: %s", (void*)thread, strerror(err));
             fflush(stdout);
         }
     }
@@ -304,7 +305,7 @@ namespace stl_ext
         if (int err = pthread_cond_signal(&cond))
         {
             pthread_t thread = pthread_self();
-            printf("%p -- signal: %s", thread, strerror(err));
+            printf("%p -- signal: %s", (void*)thread, strerror(err));
             fflush(stdout);
         }
     }
@@ -314,7 +315,7 @@ namespace stl_ext
         if (int err = pthread_cond_broadcast(&cond))
         {
             pthread_t thread = pthread_self();
-            printf("%p -- broadcast: %s\n", thread, strerror(err));
+            printf("%p -- broadcast: %s\n", (void*)thread, strerror(err));
             fflush(stdout);
         }
     }
@@ -324,7 +325,7 @@ namespace stl_ext
         if (int err = pthread_cond_wait(&cond, &mutex))
         {
             pthread_t thread = pthread_self();
-            printf("%p -- cond_wait: %s\n", thread, strerror(err));
+            printf("%p -- cond_wait: %s\n", (void*)thread, strerror(err));
             fflush(stdout);
         }
     }
@@ -367,7 +368,7 @@ namespace stl_ext
             if (err != ETIMEDOUT)
             {
                 pthread_t thread = pthread_self();
-                printf("ERROR: %p -- cond_wait_timed: %s\n", thread, strerror(err));
+                printf("ERROR: %p -- cond_wait_timed: %s\n", (void*)thread, strerror(err));
                 fflush(stdout);
             }
             //  fprintf (stderr, "err %d %s\n", err, strerror(err));
