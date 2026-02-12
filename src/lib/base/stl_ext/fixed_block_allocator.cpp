@@ -16,8 +16,8 @@ namespace stl_ext
 
     fixed_block_allocator::fixed_block_allocator(size_t value_size)
         : _blocks()
-        , _free(0)
         , _value_size(value_size)
+        , _free(0)
     {
         pthread_mutex_init(&_lock, 0);
         assert(value_size >= sizeof(pointer));
