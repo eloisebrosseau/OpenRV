@@ -5,6 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 //******************************************************************************
+#include <cstddef>
 #include <stl_ext/thread_group.h>
 
 #include <assert.h>
@@ -165,18 +166,17 @@ namespace stl_ext
             pthread_t thread = pthread_self();
             int worker_num = -1;
 
-            for (int i = 0; i < _threads.size(); i++)
+            for (size_t i = 0; i < _threads.size(); i++)
             {
                 if (pthread_equal(thread, _threads[i]))
                 {
-                    worker_num = i;
+                    worker_num = static_cast<int>(i);
                     break;
                 }
             }
 
 #ifndef PLATFORM_LINUX
             struct timeval tv;
-            int t = currentTime(&tv);
 
             fprintf(stderr, "%d %d %p/%p/%d/%lu: ", (int)tv.tv_sec, (int)tv.tv_usec, this, thread, worker_num + 1, _threads.size());
 #endif
