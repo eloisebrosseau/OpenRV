@@ -94,9 +94,9 @@ namespace stl_ext
     {
         size_t bytes = 0;
 
-        for (int i = 0; i < _allocators.size(); i++)
+        for (auto& _allocator : _allocators)
         {
-            bytes += _allocators[i]->capacity();
+            bytes += _allocator->capacity();
         }
 
         return bytes;
