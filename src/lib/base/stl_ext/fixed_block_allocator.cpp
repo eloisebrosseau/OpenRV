@@ -29,8 +29,8 @@ namespace stl_ext
     fixed_block_allocator::~fixed_block_allocator()
     {
         pthread_mutex_destroy(&_lock);
-        for (int i = 0; i < _blocks.size(); i++)
-            delete[] _blocks[i];
+        for (auto& _block : _blocks)
+            delete[] _block;
     }
 
     fixed_block_allocator::pointer fixed_block_allocator::allocate()
@@ -110,7 +110,7 @@ namespace stl_ext
     {
         size_t bytes = 0;
 
-        for (int i = 0; i < _blocks.size(); i++)
+        for (size_t i = 0; i < _blocks.size(); i++)
         {
             bytes += (1 << i) * _value_size;
         }
@@ -122,7 +122,7 @@ namespace stl_ext
     {
         const_byte_pointer p = (const_byte_pointer)ptr;
 
-        for (int i = _blocks.size(); i--;)
+        for (size_t i = _blocks.size(); i--;)
         {
             //
             //  This loop is backwards on purpose: the blocks are in order
