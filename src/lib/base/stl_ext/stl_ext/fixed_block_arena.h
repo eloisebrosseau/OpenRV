@@ -53,9 +53,8 @@ namespace stl_ext
         {
         public:
             iterator()
-                : _index(0)
-                , _it()
-                , _arena(0)
+                : _arena(0)
+                , _index(0)
             {
             }
 
