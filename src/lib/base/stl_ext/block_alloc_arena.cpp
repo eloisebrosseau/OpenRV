@@ -17,10 +17,10 @@ namespace stl_ext
     block_alloc_arena block_alloc_arena::_static_arena;
 
     block_alloc_arena::block_alloc_arena(size_t gl, size_t lbs)
-        : _running_allocation(0)
+        : _garbage_function(0)
+        , _running_allocation(0)
         , _garbage_limit(gl)
         , _large_block_size(lbs)
-        , _garbage_function(0)
         , _disable(false)
     {
         pthread_mutex_init(&_lock, 0);
