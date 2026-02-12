@@ -52,17 +52,16 @@ namespace stl_ext
 #endif
 
     thread_group::thread_group(int num_threads, int stack_mult, thread_api* api, const func_vector* funcs, const data_vector* datas)
-        : _num_finished(0)
+        : _wait_flag(true)
+        , _num_finished(0)
         , _num_threads(0)
-        , _data(0)
         , _func(0)
+        , _data(0)
         , _recall(false)
         , _debugging(false)
         , _running(true)
-        , _wait_flag(true)
         , _dispatching(false)
         , _default_stack_size(0)
-        , _api()
     {
         if (api)
             _api = *api;
