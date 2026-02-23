@@ -558,11 +558,14 @@ int main(int argc, char* argv[])
     // fmt.setProfile(QSurfaceFormat::CoreProfile);
     // fmt.setProfile(QSurfaceFormat::CompatibilityProfile);
 
-    // Set 10-10-10-2 RGBA mode
-    fmt.setRedBufferSize(10);
-    fmt.setGreenBufferSize(10);
-    fmt.setBlueBufferSize(10);
-    fmt.setAlphaBufferSize(2);
+    // Request 10-10-10-2 RGBA when -deepColor is specified
+    if (opts.deepColor)
+    {
+        fmt.setRedBufferSize(10);
+        fmt.setGreenBufferSize(10);
+        fmt.setBlueBufferSize(10);
+        fmt.setAlphaBufferSize(2);
+    }
 
     QSurfaceFormat::setDefaultFormat(fmt);
 

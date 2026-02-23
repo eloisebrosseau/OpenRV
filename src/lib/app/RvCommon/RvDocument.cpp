@@ -145,6 +145,7 @@ namespace Rv
         , m_vsyncDisabled(false)
         , m_oldGLView(0)
         , m_glView(0)
+        , m_glViewContainer(nullptr)
         , m_diagnosticsView(0)
         , m_sourceEditor(0)
         , m_displayLink(0)
@@ -194,33 +195,24 @@ namespace Rv
         }
         else
         {
-            cout << "DEBUG: Getting shared context from existing document" << endl;
             RvSession* s = static_cast<RvSession*>(docs.front());
             RvDocument* rvDoc = (RvDocument*)s->opaquePointer();
-            cout << "DEBUG: rvDoc = " << rvDoc << endl;
             GLView* existingView = rvDoc ? rvDoc->view() : nullptr;
-            cout << "DEBUG: existingView = " << existingView << endl;
             QOpenGLContext* sharedCtx = existingView ? existingView->context() : nullptr;
-            cout << "DEBUG: sharedCtx = " << sharedCtx << endl;
             m_glView = new GLView(sharedCtx, this, opts.stereoMode && !strcmp(opts.stereoMode, "hardware"),
                                   opts.vsync != 0 && !m_vsyncDisabled,
                                   true, // double buffer
                                   opts.dispRedBits, opts.dispGreenBits, opts.dispBlueBits, opts.dispAlphaBits, !m_startupResize);
-            cout << "DEBUG: Created GLView with shared context" << endl;
         }
-        
-        cout << "DEBUG: Creating window container for GLView" << endl;
+
         // Wrap QOpenGLWindow in a widget container for layout
         m_glViewContainer = QWidget::createWindowContainer(m_glView, this);
-        cout << "DEBUG: Window container created: " << m_glViewContainer << endl;
         m_glViewContainer->setFocusPolicy(Qt::StrongFocus);
         m_glViewContainer->setMouseTracking(true);
         m_glViewContainer->setAcceptDrops(true);
-        
+
         // Set the container as the event widget for QTTranslator
-        cout << "DEBUG: Setting event widget" << endl;
         m_glView->setEventWidget(m_glViewContainer);
-        cout << "DEBUG: Event widget set" << endl;
 
         // Create DiagnosticsView as a dockable widget (lazy initialization).
         m_diagnosticsView = new DiagnosticsView(nullptr, m_glView->format());

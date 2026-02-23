@@ -20,6 +20,9 @@
 #include <RvApp/Options.h>
 #include <iostream>
 #include <TwkApp/Event.h>
+#ifdef PLATFORM_DARWIN
+#include <RvCommon/DeepColorSupport.h>
+#endif
 #include <boost/thread/thread.hpp>
 #include <boost/thread/mutex.hpp>
 #include <boost/thread/condition_variable.hpp>
@@ -121,7 +124,7 @@ namespace Rv
 
     GLView::GLView(QOpenGLContext* sharedContext, RvDocument* doc, bool stereo, bool vsync, bool doubleBuffer, int red,
                    int green, int blue, int alpha, bool noResize)
-        : QOpenGLWindow(QOpenGLWindow::NoPartialUpdate)
+        : QOpenGLWindow(sharedContext, QOpenGLWindow::NoPartialUpdate)
         , m_sharedContext(sharedContext)
         , m_doc(doc)
         , m_red(red)
@@ -140,32 +143,20 @@ namespace Rv
         , m_syncThreadData(0)
         , m_eventWidget(nullptr)
     {
-        cout << "DEBUG: GLView constructor start (this=" << this << ", sharedContext=" << sharedContext << ")" << endl;
-        cout << "DEBUG: Setting surface format (RGBA " << red << "-" << green << "-" << blue << "-" << alpha << ")" << endl;
         setFormat(rvGLFormat(stereo, vsync, doubleBuffer, red, green, blue, alpha));
-        cout << "DEBUG: Surface format set" << endl;
-        
-        // QOpenGLWindow renders directly to surface - no FBO needed!
-        cout << "INFO: Using QOpenGLWindow - direct rendering to 10-10-10-2 surface (no FBO)" << endl;
 
-        cout << "DEBUG: Creating QTGLVideoDevice" << endl;
         ostringstream str;
         str << UI_APPLICATION_NAME " Main Window" << "/" << m_doc;
         // Note: eventWidget will be set later by RvDocument after creating the container
         m_videoDevice = new QTGLVideoDevice(0, str.str(), this, nullptr);
-        cout << "DEBUG: QTGLVideoDevice created: " << m_videoDevice << endl;
 
-        cout << "DEBUG: Getting session from doc" << endl;
         RvSession* sess = m_doc ? m_doc->session() : nullptr;
-        cout << "DEBUG: session = " << sess << endl;
         setTitle(sess ? sess->name().c_str() : "no session");
-        cout << "DEBUG: Title set" << endl;
 
         m_activityTimer.start();
 
         m_eventProcessingTimer.setSingleShot(true);
         connect(&m_eventProcessingTimer, SIGNAL(timeout()), this, SLOT(eventProcessingTimeout()));
-        cout << "DEBUG: GLView constructor complete" << endl;
     }
 
     void GLView::setEventWidget(QWidget* widget)
@@ -272,37 +263,20 @@ namespace Rv
             initializeGLExtensions();
             initializeOpenGLFunctions();
 
-            if (m_sharedContext)
-            {
-                context()->setShareContext(m_sharedContext);
-            }
-
             if (m_doc)
             {
                 m_doc->initializeSession();
             }
 
+#ifdef PLATFORM_DARWIN
+            if (Rv::Options::sharedOptions().deepColor)
+            {
+                configureViewForDeepColor(static_cast<unsigned long long>(winId()));
+            }
+#endif
+
             // NOTE_QT6: QGLFormat is deprecated. Using QSurfaceFormat now.
             QSurfaceFormat f = context()->format();
-
-            // Print actual RGBA color depths
-            cout << "INFO: OpenGL context RGBA color depths: "
-                 << f.redBufferSize() << "-" << f.greenBufferSize() << "-" 
-                 << f.blueBufferSize() << "-" << f.alphaBufferSize() << endl;
-
-            // Validate FBO creation for 10-10-10-2 mode
-            if (m_red == 10 && m_green == 10 && m_blue == 10 && m_alpha == 2)
-            {
-                if (!isValid())
-                {
-                    cout << "ERROR: QOpenGLWidget initialization failed!" << endl;
-                    cout << "       10-10-10-2 surface format or GL_RGB10_A2 FBO may not be supported." << endl;
-                }
-                else
-                {
-                    cout << "INFO: Successfully initialized with 10-10-10-2 surface and GL_RGB10_A2 FBO!" << endl;
-                }
-            }
 
 #ifndef PLATFORM_DARWIN
             //
@@ -573,7 +547,11 @@ namespace Rv
             }
             else
             {
-                m_videoDevice->widget()->context()->swapBuffers(m_videoDevice->widget()->context()->surface());
+                QOpenGLContext* ctx = m_videoDevice->window()
+                    ? m_videoDevice->window()->context()
+                    : (m_videoDevice->widget() ? m_videoDevice->widget()->context() : nullptr);
+                if (ctx)
+                    ctx->swapBuffers(ctx->surface());
             }
 
             trecord.swapEnd = session->profilingElapsedTime();

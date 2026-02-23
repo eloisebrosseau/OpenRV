@@ -126,14 +126,11 @@ namespace Rv
     {
         if (m_window)
         {
-            // Create shared context QOpenGLWindow for worker
-            QOpenGLWindow* openGLWindow = new QOpenGLWindow();
+            // Create a shared-context QOpenGLWindow for the worker.
+            // The context must be passed to the constructor so that context
+            // sharing is established before the native GL context is created.
+            QOpenGLWindow* openGLWindow = new QOpenGLWindow(m_window->context(), QOpenGLWindow::NoPartialUpdate);
             openGLWindow->setFormat(m_window->format());
-            openGLWindow->create();
-            if (m_window->context())
-            {
-                openGLWindow->context()->setShareContext(m_window->context());
-            }
             return new QTGLVideoDevice(name() + "-workerContextDevice", openGLWindow);
         }
         else if (m_widget)
@@ -244,24 +241,7 @@ namespace Rv
     {
         if (!isWorkerDevice())
         {
-            bool isVisible = false;
-            if (m_window)
-            {
-                isVisible = m_window->isVisible();
-            }
-            else if (m_widget)
-            {
-                isVisible = m_widget->isVisible();
-            }
-            
-            if (isVisible)
-            {
-                redraw();
-            }
-            else
-            {
-                redraw();
-            }
+            redraw();
         }
     }
 
