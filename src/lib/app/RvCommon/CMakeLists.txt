@@ -410,7 +410,8 @@ IF(RV_TARGET_DARWIN)
   TARGET_LINK_LIBRARIES(
     ${_target}
     PUBLIC TwkGLFCoreGraphics
-    PRIVATE "-framework CoreVideo" "-framework QuartzCore"
+    PRIVATE "-framework CoreVideo"
+           "-framework QuartzCore"
   )
 ENDIF()
 
