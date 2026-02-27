@@ -158,11 +158,11 @@ namespace Rv
         TWK_GLDEBUG;
 
         QSurfaceFormat fmt;
-        if (shareDevice()->window())
+        if (shareDevice() && shareDevice()->window())
         {
             fmt = shareDevice()->window()->format();
         }
-        else if (shareDevice()->widget())
+        else if (shareDevice() && shareDevice()->widget())
         {
             fmt = shareDevice()->widget()->format();
         }
@@ -174,7 +174,7 @@ namespace Rv
         // context. For robust context sharing, ScreenView should be refactored
         // to use QOpenGLWindow with the shared-context constructor.
         QOpenGLContext* sharedCtx = nullptr;
-        if (shareDevice()->window() && shareDevice()->window()->context())
+        if (shareDevice() && shareDevice()->window() && shareDevice()->window()->context())
         {
             sharedCtx = shareDevice()->window()->context();
         }

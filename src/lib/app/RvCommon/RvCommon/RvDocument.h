@@ -30,6 +30,9 @@ namespace TwkApp
 namespace Rv
 {
     class GLView;
+#if defined(PLATFORM_DARWIN) && defined(USE_METAL)
+    class MetalView;
+#endif
     class DiagnosticsView;
     class DesktopVideoModule;
     class DesktopVideoDevice;
@@ -73,6 +76,10 @@ namespace Rv
 
         GLView* view() const;
         QWidget* viewContainer() const;
+
+#if defined(PLATFORM_DARWIN) && defined(USE_METAL)
+        MetalView* metalView() const;
+#endif
 
         const QAction* lastPopupAction() const { return m_lastPopupAction; }
 
@@ -170,6 +177,9 @@ namespace Rv
         GLView* m_glView;
         QWidget* m_glViewContainer;
         GLView* m_oldGLView;
+#if defined(PLATFORM_DARWIN) && defined(USE_METAL)
+        MetalView* m_metalView;
+#endif
         QWidget* m_viewContainerWidget;
         RvTopViewToolBar* m_topViewToolBar;
         RvBottomViewToolBar* m_bottomViewToolBar;
