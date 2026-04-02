@@ -178,7 +178,7 @@ namespace Rv
 #if defined(PLATFORM_DARWIN) && defined(USE_METAL)
         MetalView* m_metalView;
 #endif
-        QWidget* m_viewContainerWidget;
+        QWidget* m_glViewContainer;
         RvTopViewToolBar* m_topViewToolBar;
         RvBottomViewToolBar* m_bottomViewToolBar;
         QWidget* m_centralWidget;

@@ -176,11 +176,11 @@ namespace Rv
 
         checkDriverVSync();
 
-        m_viewContainerWidget = new QWidget(this);
-        m_centralWidget = new QWidget(m_viewContainerWidget);
-        m_topViewToolBar = new RvTopViewToolBar(m_viewContainerWidget);
-        m_bottomViewToolBar = new RvBottomViewToolBar(m_viewContainerWidget);
-        QVBoxLayout* vlayout = new QVBoxLayout(m_viewContainerWidget);
+        m_glViewContainer = new QWidget(this);
+        m_centralWidget = new QWidget(m_glViewContainer);
+        m_topViewToolBar = new RvTopViewToolBar(m_glViewContainer);
+        m_bottomViewToolBar = new RvBottomViewToolBar(m_glViewContainer);
+        QVBoxLayout* vlayout = new QVBoxLayout(m_glViewContainer);
 
         vlayout->addWidget(m_topViewToolBar);
         vlayout->addWidget(m_centralWidget);
@@ -207,9 +207,6 @@ namespace Rv
         m_metalView->setAcceptDrops(true);
         m_metalView->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
         m_metalView->resize(m_metalView->sizeHint());
-
-        // MetalView IS the container widget — no createWindowContainer() needed.
-        m_glViewContainer = m_metalView;
 
         m_metalView->setEventWidget(m_metalView);
 
@@ -243,29 +240,11 @@ namespace Rv
         {
             RvSession* s = static_cast<RvSession*>(docs.front());
             RvDocument* rvDoc = (RvDocument*)s->opaquePointer();
-            GLView* existingView = rvDoc ? rvDoc->view() : nullptr;
-            QOpenGLContext* sharedCtx = existingView ? existingView->context() : nullptr;
-            m_glView =
-                new GLView(sharedCtx, this, opts.stereoMode && !strcmp(opts.stereoMode, "hardware"), opts.vsync != 0 && !m_vsyncDisabled,
-                           true, // double buffer
-                           opts.dispRedBits, opts.dispGreenBits, opts.dispBlueBits, opts.dispAlphaBits, !m_startupResize);
+            m_glView = new GLView(this, rvDoc->view()->context(), this, opts.stereoMode && !strcmp(opts.stereoMode, "hardware"),
+                                  opts.vsync != 0 && !m_vsyncDisabled,
+                                  true, // double buffer
+                                  opts.dispRedBits, opts.dispGreenBits, opts.dispBlueBits, opts.dispAlphaBits, !m_startupResize);
         }
-
-        // Pre-size the QOpenGLWindow before wrapping it in a container.
-        // createWindowContainer() uses QWindow::size() (not sizeHint()) as the
-        // container's sizeHint. Without this, QWindow::size() is QSize(0,0) and
-        // the container starts at zero, ignoring GLView::sizeHint()'s 1024x576.
-        m_glView->resize(m_glView->sizeHint());
-
-        // Wrap QOpenGLWindow in a widget container for layout
-        m_glViewContainer = QWidget::createWindowContainer(m_glView, this);
-        m_glViewContainer->setFocusPolicy(Qt::StrongFocus);
-        m_glViewContainer->setMouseTracking(true);
-        m_glViewContainer->setAcceptDrops(true);
-        m_glViewContainer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-
-        // Set the container as the event widget for QTTranslator
-        m_glView->setEventWidget(m_glViewContainer);
 
         // Create DiagnosticsView as a dockable widget (lazy initialization).
         m_diagnosticsView = new DiagnosticsView(nullptr, m_glView->format());
@@ -285,11 +264,21 @@ namespace Rv
 
         m_stackedLayout = new QStackedLayout(m_centralWidget);
         m_stackedLayout->setStackingMode(QStackedLayout::StackAll);
+#if defined(PLATFORM_DARWIN) && defined(USE_METAL)
+        m_stackedLayout->addWidget(m_metalView);
+#else
         m_stackedLayout->addWidget(m_glView);
+#endif
 
-        setCentralWidget(m_viewContainerWidget);
+        setCentralWidget(m_glViewContainer);
 
+#if defined(PLATFORM_DARWIN) && defined(USE_METAL)
+        // Defer focus: MetalView has WA_NativeWindow so its NSView exists immediately,
+        // but [nsview becomeFirstResponder] crashes before the window hierarchy is shown.
+        QTimer::singleShot(0, this, [this]() { m_metalView->setFocus(Qt::OtherFocusReason); });
+#else
         m_glView->setFocus(Qt::OtherFocusReason);
+#endif
         // qApp->installEventFilter(m_glView);
 
         // #ifdef PLATFORM_DARWIN
@@ -695,7 +684,11 @@ namespace Rv
                 setBuildMenu();
             }
 #endif
+#if defined(PLATFORM_DARWIN) && defined(USE_METAL)
+            m_metalView->setFocus(Qt::OtherFocusReason);
+#else
             m_glView->setFocus(Qt::OtherFocusReason);
+#endif
         }
         else if (m == IPCore::Session::audioUnavailbleMessage())
         {
@@ -880,16 +873,7 @@ namespace Rv
         Qt::KeyboardModifiers cur = m_glView->videoDevice()->translator().currentModifiers();
         oldGLView->stopProcessingEvents();
 
-        GLView* newGLView = new GLView(view()->context(), this, stereo, vsync, doubleBuffer, red, green, blue, alpha);
-        newGLView->resize(oldGLView->width(), oldGLView->height());
-        m_glViewContainer = QWidget::createWindowContainer(newGLView, this);
-        m_glViewContainer->setFocusPolicy(Qt::StrongFocus);
-        m_glViewContainer->setMouseTracking(true);
-        m_glViewContainer->setAcceptDrops(true);
-        m_glViewContainer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-
-        // Set the container as the event widget for QTTranslator
-        newGLView->setEventWidget(m_glViewContainer);
+        GLView* newGLView = new GLView(this, view()->context(), this, stereo, vsync, doubleBuffer, red, green, blue, alpha);
 
         newGLView->setContentSize(oldGLView->sizeHint().width(), oldGLView->sizeHint().height());
 
@@ -903,13 +887,7 @@ namespace Rv
         if (!newGLView->isValid())
         {
             delete newGLView;
-            newGLView = new GLView(view()->context(), this);
-            m_glViewContainer = QWidget::createWindowContainer(newGLView, this);
-            m_glViewContainer->setFocusPolicy(Qt::StrongFocus);
-            m_glViewContainer->setMouseTracking(true);
-            m_glViewContainer->setAcceptDrops(true);
-            m_glViewContainer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-            newGLView->setEventWidget(m_glViewContainer);
+            newGLView = new GLView(this, view()->context(), this);
             resetGLPrefs = true;
         }
 
@@ -1066,8 +1044,6 @@ namespace Rv
     }
 
     GLView* RvDocument::view() const { return m_glView; }
-
-    QWidget* RvDocument::viewContainer() const { return m_glViewContainer; }
 
 #if defined(PLATFORM_DARWIN) && defined(USE_METAL)
     MetalView* RvDocument::metalView() const { return m_metalView; }
@@ -1561,7 +1537,11 @@ namespace Rv
             }
         }
 
+#if defined(PLATFORM_DARWIN) && defined(USE_METAL)
+        m_metalView->setFocus(Qt::OtherFocusReason);
+#else
         m_glView->setFocus(Qt::OtherFocusReason);
+#endif
         activateWindow();
         raise();
         //
