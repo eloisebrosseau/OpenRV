@@ -970,14 +970,8 @@ int utf8Main(int argc, char* argv[])
     setEnvVar("LC_ALL", "C");
     TwkFB::ThreadPool::initialize();
 
-    //
-    //  XXX dummyDev is leaking here.  Best would be to pass it to the App so
-    //  that it could delete it after startup, since it's no longer needed at
-    //  that point.
-    //
-
 #ifdef RVIO_HW
-    TwkGLF::FBOVideoDevice* dummyDev = new TwkGLF::FBOVideoDevice(0, 10, 10, false);
+    auto dummyDev = std::make_unique<TwkGLF::FBOVideoDevice>(nullptr, 10, 10, false);
 #else
     TwkGLF::OSMesaVideoDevice* dummyDev = new TwkGLF::OSMesaVideoDevice(0, 10, 10, true);
     FrameBuffer* dummyFB = new FrameBuffer(10, 10, 4, FrameBuffer::FLOAT);
