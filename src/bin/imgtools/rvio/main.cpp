@@ -1646,7 +1646,7 @@ int utf8Main(int argc, char* argv[])
         threadAPI.create = GC_pthread_create;
         threadAPI.join = GC_pthread_join;
         threadAPI.detach = GC_pthread_detach;
-        outmov = new ThreadedMovie(inputMovies, outFrames, 8, &threadAPI, threadedMovieInit);
+        outmov = new ThreadedMovie(inputMovies, outFrames, 8, &threadAPI, threadedMovieInit, MovieRV::uninit);
 #endif
 #endif
 
@@ -1739,10 +1739,6 @@ int utf8Main(int argc, char* argv[])
 
         if (!writer->write(outmov, outfile, writeRequest))
             exit(-2);
-
-        // clean up any frame buffers we allocated writing the movie
-        //
-        MovieRV::uninit();
     }
     catch (TwkExc::Exception& exc)
     {
