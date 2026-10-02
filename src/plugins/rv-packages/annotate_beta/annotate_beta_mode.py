@@ -509,6 +509,7 @@ class AnnotateBetaMode(rvtypes.MinorMode):
 
     def _on_after_graph_view_change(self, event):
         self._engine.set_tags()
+        self._update_undo_redo_buttons()
         event.reject()
 
     def _on_category_state_changed(self, event):
@@ -522,6 +523,11 @@ class AnnotateBetaMode(rvtypes.MinorMode):
         frame, so our undo/redo button enabled state may be stale.
         """
         self._update_undo_redo_buttons()
+        event.reject()
+
+    def _on_frame_dependent_state_changed(self, event):
+        if not commands.isPlaying():
+            self._update_undo_redo_buttons()
         event.reject()
 
     def _on_set_current_annotate_node(self, event):
@@ -543,6 +549,7 @@ class AnnotateBetaMode(rvtypes.MinorMode):
                     self._preferred_paint_node = node_name
             except Exception:
                 pass
+        self._update_undo_redo_buttons()
         event.reject()
 
     def _on_session_clear(self, event):
@@ -555,6 +562,7 @@ class AnnotateBetaMode(rvtypes.MinorMode):
 
     def _cfg_toggle_store_on_src(self, e):
         self._store_on_src = not self._store_on_src
+        self._update_undo_redo_buttons()
 
     def _cfg_state_store_on_src(self):
         return commands.CheckedMenuState if self._store_on_src else commands.NeutralMenuState
@@ -611,6 +619,8 @@ class AnnotateBetaMode(rvtypes.MinorMode):
             ("graph-node-inputs-changed", self._on_node_inputs_changed, "Update UI"),
             ("before-graph-view-change", self._on_before_graph_view_change, "Update UI"),
             ("after-graph-view-change", self._on_after_graph_view_change, "Update UI"),
+            ("frame-changed", self._on_frame_dependent_state_changed, "Update undo/redo buttons"),
+            ("play-stop", self._on_frame_dependent_state_changed, "Update undo/redo buttons"),
             ("event-category-state-changed", self._on_category_state_changed, "Update tool availability"),
             ("set-current-annotate-mode-node", self._on_set_current_annotate_node, "Set preferred paint node"),
             (

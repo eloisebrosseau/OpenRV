@@ -4,6 +4,9 @@
 import math
 import os
 import uuid
+from collections import defaultdict
+from dataclasses import dataclass
+from enum import StrEnum
 
 from rv import commands
 
@@ -40,6 +43,24 @@ _PEN_SLIDER_MIN = 1
 _PEN_SLIDER_MAX = 100
 
 _SIZE_MIN = 0.001
+
+
+class PaintActionType(StrEnum):
+    CREATE = "CREATE"
+    CLEAR_ALL = "CLEAR_ALL"
+
+
+@dataclass(frozen=True)
+class PaintAction:
+    type: PaintActionType
+    node_names: list[str]  # Full property path prefixes, e.g. "RVPaint_1.rect:3:42:host_123"
+
+
+@dataclass(frozen=True)
+class PaintFrame:
+    paint_node: str
+    frame: int
+
 
 # Base WCS fractions for each font size tier (desired px at zoom=1 / 1080).
 # Multiplied by _screen_scale() at draw time — identical to how stroke
@@ -87,10 +108,8 @@ class AnnotateDrawEngine:
         # screen-constant across different zoom levels and image aspect ratios.
         self._current_source_name = None
 
-        # Undo/redo stacks — each entry: (paint_node, frame, node_name)
-        # node_name is the full prop path prefix, e.g. "RVPaint_1.rect:3:42:host_123"
-        self._undo_stack = []  # list of (paint_node, frame, node_name)
-        self._redo_stack = []
+        self._undo_stacks: defaultdict[PaintFrame, list[PaintAction]] = defaultdict(list)
+        self._redo_stacks: defaultdict[PaintFrame, list[PaintAction]] = defaultdict(list)
 
     # ------------------------------------------------------------------
     # Event table setup
@@ -247,15 +266,14 @@ class AnnotateDrawEngine:
                 if commands.propertyExists(annotate_tag):
                     commands.deleteProperty(annotate_tag)
 
-    def _find_paint_node(self):
+    def _find_paint_node(self) -> tuple[str | None, int | None]:
         try:
             frame = commands.frame()
             infos = commands.metaEvaluate(frame, commands.viewNode())
 
-            # If live_review has nominated a specific paint node (via
-            # set-current-annotate-mode-node), prefer it so that RV-drawn
-            # annotations land on the annotation source group's node — the same
-            # one live_review tracks — rather than the local pipeline node.
+            # If an external package has nominated a specific paint node (via
+            # set-current-annotate-mode-node), prefer it so that RV-drawn annotations
+            # land on the annotation source group's node rather than the local pipeline node.
             preferred = getattr(self._mode, "_preferred_paint_node", "")
             if preferred:
                 for info in infos:
@@ -285,6 +303,10 @@ class AnnotateDrawEngine:
             return None, frame
         except Exception:
             return None, None
+
+    def _current_paint_frame(self) -> PaintFrame | None:
+        paint_node, frame = self._find_paint_node()
+        return PaintFrame(paint_node, frame) if paint_node else None
 
     def _next_id(self, paint_node):
         prop = f"{paint_node}.paint.nextId"
@@ -320,27 +342,9 @@ class AnnotateDrawEngine:
         if component not in commands.getStringProperty(order_prop):
             commands.insertStringProperty(order_prop, [component])
 
-    def _register_undo_entry(self, paint_node, frame, shape_uuid):
-        def _ensure(prop, ptype, w):
-            if not commands.propertyExists(prop):
-                commands.newProperty(prop, ptype, w)
-
-        host = commands.myNetworkHost().replace(".", "_")
-        pid = os.getpid()
-        undo_prop = f"{paint_node}.frame:{frame}.userUndoStack:{host}_{pid}"
-        _ensure(undo_prop, commands.StringType, 1)
-        commands.insertStringProperty(undo_prop, [shape_uuid, "create"])
-
-        if getattr(self._mode, "_auto_mark", False):
-            try:
-                commands.markFrame(commands.frame(), True)
-            except Exception:
-                pass
-
-    def _frame_order_and_undo(self, paint_node, frame, node_name, shape_uuid):
-        """Insert the component into the frame draw order and undo stack."""
-        self._add_to_order(paint_node, frame, node_name)
-        self._register_undo_entry(paint_node, frame, shape_uuid)
+    def _automatically_mark_frame(self):
+        if self._mode._auto_mark:
+            commands.markFrame(commands.frame(), True)
 
     # ------------------------------------------------------------------
     # Pointer / coordinate helpers
@@ -438,7 +442,8 @@ class AnnotateDrawEngine:
             commands.setStringProperty(f"{n}.uuid", [shape_uuid], True)
             commands.setIntProperty(f"{n}.softDeleted", [0], True)
 
-            self._frame_order_and_undo(paint_node, frame, n, shape_uuid)
+            self._add_to_order(paint_node, frame, n)
+            self._automatically_mark_frame()
 
             commands.redraw()
             return n
@@ -561,14 +566,17 @@ class AnnotateDrawEngine:
         if node:
             self._text_node = node
 
+    def _push_create(self, paint_node: str, frame: int, node_name: str):
+        paint_frame = PaintFrame(paint_node, frame)
+        self._undo_stacks[paint_frame].append(PaintAction(PaintActionType.CREATE, [node_name]))
+        self._redo_stacks.pop(paint_frame, None)
+
     def _register_text_undo(self):
         if self._text_registered or self._text_node is None:
             return
 
-        shape_uuid = self._uuid_for(self._text_node)
-        self._register_undo_entry(self._text_paint_node, self._text_frame, shape_uuid)
-        self._undo_stack.append((self._text_paint_node, self._text_frame, self._text_node))
-        self._redo_stack.clear()
+        self._automatically_mark_frame()
+        self._push_create(self._text_paint_node, self._text_frame, self._text_node)
         self._text_registered = True
         self._notify_buttons()
 
@@ -609,11 +617,12 @@ class AnnotateDrawEngine:
                 commands.redraw()
             except Exception:
                 pass
-
-        if self._text_registered and self._undo_stack:
-            _, _, last_node = self._undo_stack[-1]
-            if last_node == self._text_node:
-                self._undo_stack.pop()
+        if self._text_registered:
+            text_action = PaintAction(PaintActionType.CREATE, [self._text_node])
+            undo_stack = self._undo_stacks.get(PaintFrame(self._text_paint_node, self._text_frame), [])
+            is_text_action_last = undo_stack[-1:] == [text_action]
+            if is_text_action_last:
+                undo_stack.pop()
                 self._notify_buttons()
 
         self._reset_text()
@@ -694,7 +703,7 @@ class AnnotateDrawEngine:
 
             # All properties read by _get_paint_start must be written before .points,
             # because setting .points fires graph-state-change which immediately tries
-            # to build the PAINT_START payload for the LiveReview package.
+            # to build the PAINT_START payload for external packages.
             _ensure(f"{n}.softDeleted", commands.IntType, 1)
             commands.setFloatProperty(f"{n}.color", color, True)
             commands.setFloatProperty(f"{n}.width", [push_width], True)
@@ -714,7 +723,8 @@ class AnnotateDrawEngine:
             commands.setStringProperty(f"{n}.tipTexture", [""], True)
             commands.setIntProperty(f"{n}.blendMode", [2 if blend_mode == "additive" else 0], True)
 
-            self._frame_order_and_undo(paint_node, frame, n, stroke_uuid)
+            self._add_to_order(paint_node, frame, n)
+            self._automatically_mark_frame()
             commands.redraw()
             return n
         except Exception as e:
@@ -793,8 +803,7 @@ class AnnotateDrawEngine:
             except Exception:
                 pass
         # Commit to undo stack now that stroke is complete
-        self._undo_stack.append((self._pen_paint_node, self._pen_frame, self._pen_stroke))
-        self._redo_stack.clear()
+        self._push_create(self._pen_paint_node, self._pen_frame, self._pen_stroke)
         self._notify_buttons()
         commands.sendInternalEvent("annotate-stroke-released")
         self._pen_stroke = None
@@ -851,13 +860,12 @@ class AnnotateDrawEngine:
         self._shift_transition = False
         commands.sendInternalEvent("set-current-annotate-mode-node", paint_node)
         # Open a sync accumulation block that stays open until _do_release so the
-        # entire shape (push → drag → release) is sent as one batch to Live Review
-        # participants instead of immediately broadcasting the initial zero-size shape.
+        # entire shape (push → drag → release) is sent as one batch to remote
+        # clients instead of immediately broadcasting the initial zero-size shape.
         self._begin_sync()
         self._current_shape = self._new_shape(paint_node, frame, prefix, pei, pei)
         if self._current_shape:
-            self._undo_stack.append((self._current_node, self._current_frame, self._current_shape))
-            self._redo_stack.clear()
+            self._push_create(self._current_node, self._current_frame, self._current_shape)
             self._notify_buttons()
         else:
             self._end_sync(force=True)
@@ -1090,22 +1098,6 @@ class AnnotateDrawEngine:
             event.reject()
 
     # ------------------------------------------------------------------
-    # Undo / redo / clear
-    # ------------------------------------------------------------------
-
-    def has_undo(self):
-        return bool(self._undo_stack)
-
-    def has_redo(self):
-        return bool(self._redo_stack)
-
-    def clear_annotate_history(self):
-        self._reset_text()
-        self._undo_stack.clear()
-        self._redo_stack.clear()
-        self._notify_buttons()
-
-    # ------------------------------------------------------------------
     # Order-list helpers
     # ------------------------------------------------------------------
 
@@ -1146,38 +1138,62 @@ class AnnotateDrawEngine:
     # Undo / redo / clear
     # ------------------------------------------------------------------
 
+    def has_undo(self) -> bool:
+        paint_frame = self._current_paint_frame()
+        return bool(self._undo_stacks.get(paint_frame))
+
+    def has_redo(self) -> bool:
+        paint_frame = self._current_paint_frame()
+        return bool(self._redo_stacks.get(paint_frame))
+
+    def clear_annotate_history(self):
+        self._reset_text()
+        self._undo_stacks.clear()
+        self._redo_stacks.clear()
+        self._notify_buttons()
+
     def undo(self):
         self.commit_text_if_active()
-        if not self._undo_stack:
+        paint_frame = self._current_paint_frame()
+        undo_stack = self._undo_stacks.get(paint_frame)
+
+        if not paint_frame or not undo_stack:
             return
-        paint_node, frame, node_name = self._undo_stack.pop()
+
+        action = undo_stack.pop()
+        [node_name] = action.node_names
+
         self._begin_sync()
-        try:
-            self._remove_from_order(paint_node, frame, node_name)
-            commands.setIntProperty(f"{node_name}.softDeleted", [1], True)
-            commands.redraw()
-        except Exception as e:
-            print(f"[annotate_beta] undo error: {e}")
+        self._remove_from_order(paint_frame.paint_node, paint_frame.frame, node_name)
+        commands.setIntProperty(f"{node_name}.softDeleted", [1], True)
         self._end_sync(force=True)
-        self._redo_stack.append((paint_node, frame, node_name))
+
+        self._redo_stacks[paint_frame].append(action)
+        commands.redraw()
         self._notify_buttons()
+
         commands.sendInternalEvent("undo-paint", self._uuid_for(node_name))
 
     def redo(self):
         self.commit_text_if_active()
-        if not self._redo_stack:
+        paint_frame = self._current_paint_frame()
+        redo_stack = self._redo_stacks.get(paint_frame)
+
+        if not paint_frame or not redo_stack:
             return
-        paint_node, frame, node_name = self._redo_stack.pop()
+
+        action = redo_stack.pop()
+        [node_name] = action.node_names
+
         self._begin_sync()
-        try:
-            self._restore_to_order(paint_node, frame, node_name)
-            commands.setIntProperty(f"{node_name}.softDeleted", [0], True)
-            commands.redraw()
-        except Exception as e:
-            print(f"[annotate_beta] redo error: {e}")
+        self._restore_to_order(paint_frame.paint_node, paint_frame.frame, node_name)
+        commands.setIntProperty(f"{node_name}.softDeleted", [0], True)
         self._end_sync(force=True)
-        self._undo_stack.append((paint_node, frame, node_name))
+
+        self._undo_stacks[paint_frame].append(action)
+        commands.redraw()
         self._notify_buttons()
+
         commands.sendInternalEvent("redo-paint", self._uuid_for(node_name))
 
     @staticmethod
@@ -1205,7 +1221,7 @@ class AnnotateDrawEngine:
         """Remove all visible nodes on the current frame from the draw order.
 
         Iterates every RVPaint node so that annotations received from remote
-        clients (which land on the live-review annotation source group's node)
+        clients (which land on the annotation source group's node)
         are cleared along with locally drawn ones.
         """
         self.commit_text_if_active()
@@ -1216,7 +1232,7 @@ class AnnotateDrawEngine:
         if not all_paint_nodes:
             return
         self._begin_sync()
-        cleared = []
+        any_cleared = False
         cleared_uuids = []
         for paint_node in all_paint_nodes:
             order_prop = f"{paint_node}.frame:{frame}.order"
@@ -1232,7 +1248,6 @@ class AnnotateDrawEngine:
                     already_deleted = commands.propertyExists(deleted_prop) and commands.getIntProperty(deleted_prop)[0]
                     if not already_deleted:
                         commands.setIntProperty(deleted_prop, [1], True)
-                        cleared.append((paint_node, frame, node_name))
                         uuid = self._uuid_for(node_name)
                         if uuid:
                             cleared_uuids.append(uuid)
@@ -1243,10 +1258,12 @@ class AnnotateDrawEngine:
                     surviving.append(comp)
             if node_cleared:
                 commands.setStringProperty(order_prop, surviving, True)
+                any_cleared = True
+                paint_frame = PaintFrame(paint_node, frame)
+                self._undo_stacks.pop(paint_frame, None)
+                self._redo_stacks.pop(paint_frame, None)
         self._end_sync(force=True)
-        if cleared:
-            self._undo_stack.extend(cleared)
-            self._redo_stack.clear()
+        if any_cleared:
             commands.redraw()
         self._notify_buttons()
         primary = all_paint_nodes[0]
@@ -1297,8 +1314,8 @@ class AnnotateDrawEngine:
                     commands.setStringProperty(order_prop, surviving, True)
                     any_cleared = True
         self._end_sync(force=True)
-        self._undo_stack.clear()
-        self._redo_stack.clear()
+        self._undo_stacks.clear()
+        self._redo_stacks.clear()
         self._notify_buttons()
         if any_cleared:
             commands.redraw()
@@ -1317,17 +1334,11 @@ class AnnotateDrawEngine:
 
     def _notify_buttons(self):
         """Tell the mode to update undo/redo button enabled state."""
-        try:
-            self._mode._update_undo_redo_buttons()
-        except Exception:
-            pass
+        self._mode._update_undo_redo_buttons()
 
     def _notify_draw_started(self):
         """Tell the mode to close any open popups (e.g. color picker)."""
-        try:
-            self._mode._hide_color_picker()
-        except Exception:
-            pass
+        self._mode._hide_color_picker()
 
     # ------------------------------------------------------------------
     # Stylus eraser-end handlers
