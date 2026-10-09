@@ -349,6 +349,7 @@ class AnnotateBetaMode(rvtypes.MinorMode):
 
     def _on_after_graph_view_change(self, event):
         paint.set_tags()
+        self._update_undo_redo_buttons()
         event.reject()
 
     def _on_category_state_changed(self, event):
@@ -362,6 +363,11 @@ class AnnotateBetaMode(rvtypes.MinorMode):
         frame, so our undo/redo button enabled state may be stale.
         """
         self._update_undo_redo_buttons()
+        event.reject()
+
+    def _on_frame_dependent_state_changed(self, event):
+        if not commands.isPlaying():
+            self._update_undo_redo_buttons()
         event.reject()
 
     def _on_set_current_annotate_node(self, event):
@@ -383,6 +389,7 @@ class AnnotateBetaMode(rvtypes.MinorMode):
                 infos = []
             if any(info.get("nodeType") == "RVPaint" and info.get("node") == node_name for info in infos):
                 self._engine.preferred_paint_node = node_name
+        self._update_undo_redo_buttons()
         event.reject()
 
     def _on_session_clear(self, event):
@@ -401,6 +408,10 @@ class AnnotateBetaMode(rvtypes.MinorMode):
             setattr(target, attribute, not getattr(target, attribute))
 
         return (label, toggle, None, lambda: _menu_state(getattr(target, attribute)))
+
+    def _toggle_store_on_source(self, event):
+        self._settings.store_on_source = not self._settings.store_on_source
+        self._update_undo_redo_buttons()
 
     def _toggle_link_colors(self, event):
         self._link_tool_colors = not self._link_tool_colors
@@ -434,6 +445,8 @@ class AnnotateBetaMode(rvtypes.MinorMode):
             ("graph-node-inputs-changed", self._on_node_inputs_changed, "Update UI"),
             ("before-graph-view-change", self._on_before_graph_view_change, "Update UI"),
             ("after-graph-view-change", self._on_after_graph_view_change, "Update UI"),
+            ("frame-changed", self._on_frame_dependent_state_changed, "Update undo/redo buttons"),
+            ("play-stop", self._on_frame_dependent_state_changed, "Update undo/redo buttons"),
             ("event-category-state-changed", self._on_category_state_changed, "Update tool availability"),
             ("set-current-annotate-mode-node", self._on_set_current_annotate_node, "Set preferred paint node"),
             (
@@ -493,7 +506,12 @@ class AnnotateBetaMode(rvtypes.MinorMode):
     @property
     def menu(self):
         configure_items = [
-            self._toggle_item("Draw On Source When Possible", self._settings, "store_on_source"),
+            (
+                "Draw On Source When Possible",
+                self._toggle_store_on_source,
+                None,
+                lambda: _menu_state(self._settings.store_on_source),
+            ),
             self._toggle_item("Automatically Mark Annotated Frames", self._settings, "auto_mark"),
             ("Link Tool Colors", self._toggle_link_colors, None, lambda: _menu_state(self._link_tool_colors)),
             (
