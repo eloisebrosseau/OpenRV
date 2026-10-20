@@ -339,7 +339,7 @@ class AnnotateBetaMode(rvtypes.MinorMode):
         else:
             self._dock.hide()
 
-        airbrush_on = commands.isEventCategoryEnabled("annotate_airbrush_category")
+        brush_on = commands.isEventCategoryEnabled("annotate_brush_category")
         burn_on = commands.isEventCategoryEnabled("annotate_burn_category")
         dodge_on = commands.isEventCategoryEnabled("annotate_dodge_category")
         soft_erase_on = commands.isEventCategoryEnabled("annotate_softerase_category")
@@ -347,7 +347,7 @@ class AnnotateBetaMode(rvtypes.MinorMode):
         text_on = commands.isEventCategoryEnabled("annotate_text_category")
         sample_on = commands.isEventCategoryEnabled("annotate_sample_category")
 
-        toolbar.set_tool_enabled(constants.Tool.AIRBRUSH, airbrush_on)
+        toolbar.set_tool_enabled(constants.Tool.BRUSH, brush_on)
         toolbar.set_blend_mode_enabled(constants.ColorModifier.DARKEN, burn_on)
         toolbar.set_blend_mode_enabled(constants.ColorModifier.ADDITIVE, dodge_on)
         toolbar.set_soft_erase_enabled(soft_erase_on)

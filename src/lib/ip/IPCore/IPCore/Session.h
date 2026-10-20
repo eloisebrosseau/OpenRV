@@ -43,6 +43,7 @@ namespace IPCore
     {
         inline constexpr std::string_view annotateCategory = "annotate_category";
         inline constexpr std::string_view annotateAirbrushCategory = "annotate_airbrush_category";
+        inline constexpr std::string_view annotateBrushCategory = "annotate_brush_category";
         inline constexpr std::string_view annotateBurnCategory = "annotate_burn_category";
         inline constexpr std::string_view annotateCloneCategory = "annotate_clone_category";
         inline constexpr std::string_view annotateDodgeCategory = "annotate_dodge_category";
@@ -85,8 +86,9 @@ namespace IPCore
             // Explicitly specify template parameters for MSVC compatibility.
             // CTAD (Class Template Argument Deduction) works on GCC/Clang but
             // fails on Windows MSVC, so we specify the number of categories explicitly.
-            return std::array<std::string_view, 35>{annotateCategory,
+            return std::array<std::string_view, 36>{annotateCategory,
                                                     annotateAirbrushCategory,
+                                                    annotateBrushCategory,
                                                     annotateBurnCategory,
                                                     annotateCloneCategory,
                                                     annotateDodgeCategory,
