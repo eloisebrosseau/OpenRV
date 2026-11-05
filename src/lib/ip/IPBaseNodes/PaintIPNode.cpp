@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 #include <IPBaseNodes/PaintIPNode.h>
+#include <IPCore/BrushCatalogue.h>
 #include <IPCore/PaintCommand.h>
 #include <IPCore/SessionIPNode.h>
 #include <IPCore/Exception.h>
@@ -11,6 +12,7 @@
 #include <TwkGLF/GL.h>
 #include <TwkGLText/TwkGLText.h>
 #include <exception>
+#include <optional>
 #include <mutex>
 #include <stl_ext/string_algo.h>
 #include <cstdlib>
@@ -335,7 +337,11 @@ namespace IPCore
         const IntProperty* durationP = c->property<IntProperty>("duration");
 
         const FloatProperty* hardnessP = c->property<FloatProperty>("hardness");
-        const StringProperty* tipTextureP = c->property<StringProperty>("tipTexture");
+        const FloatProperty* spacingBiasP = c->property<FloatProperty>("spacingBias");
+        const FloatProperty* spacingJitterP = c->property<FloatProperty>("spacingJitter");
+        const FloatProperty* opacityJitterP = c->property<FloatProperty>("opacityJitter");
+        const FloatProperty* radiusJitterP = c->property<FloatProperty>("radiusJitter");
+        const FloatProperty* rotationJitterP = c->property<FloatProperty>("rotationJitter");
         const IntProperty* blendModeP = c->property<IntProperty>("blendMode");
 
         const float width = widthP && widthP->size() ? widthP->front() : 0.01f;
@@ -352,8 +358,18 @@ namespace IPCore
         const int startFrame = (startFrameP != nullptr && startFrameP->size() != 0) ? startFrameP->front() : getStartFrame(*c);
         const int duration = (durationP != nullptr && durationP->size() != 0) ? durationP->front() : 1;
 
-        const float hardness = hardnessP && hardnessP->size() ? hardnessP->front() : 100.0f;
-        const string tipTexture = tipTextureP && tipTextureP->size() ? tipTextureP->front() : string();
+        const std::optional<Paint::BrushEntry> brushEntry = Paint::bundledCatalogue().brushEntry(brush);
+        const Paint::BrushDefaults defaults = brushEntry.has_value() ? brushEntry->params : Paint::BrushDefaults{};
+
+        const float hardness = hardnessP != nullptr && hardnessP->size() > 0 ? hardnessP->front() : defaults.hardness;
+        const float spacingBias = spacingBiasP != nullptr && spacingBiasP->size() > 0 ? spacingBiasP->front() : defaults.spacingBias;
+        const float spacingJitter =
+            spacingJitterP != nullptr && spacingJitterP->size() > 0 ? spacingJitterP->front() : defaults.spacingJitter;
+        const float opacityJitter =
+            opacityJitterP != nullptr && opacityJitterP->size() > 0 ? opacityJitterP->front() : defaults.opacityJitter;
+        const float radiusJitter = radiusJitterP != nullptr && radiusJitterP->size() > 0 ? radiusJitterP->front() : defaults.radiusJitter;
+        const float rotationJitter =
+            rotationJitterP != nullptr && rotationJitterP->size() > 0 ? rotationJitterP->front() : defaults.rotationJitter;
         const unsigned int blendMode = blendModeP && blendModeP->size() ? blendModeP->front() : Paint::PolyLine::BlendNormal;
 
         p.width = width;
@@ -370,10 +386,8 @@ namespace IPCore
         p.startFrame = startFrame;
         p.duration = duration;
         p.hardness = hardness;
-        p.tipTexture = tipTexture;
+        p.tipTexture = brushEntry.has_value() ? brushEntry->tip : "";
         p.stampBlendMode = (Paint::PolyLine::StampBlendMode)blendMode;
-
-        const bool isStampBrush = !tipTexture.empty();
 
         // Per-point widths are present when widthP has one entry per point.
         // Allow widthP to lag pointsP by one: the Mu layer inserts the point and
@@ -387,7 +401,7 @@ namespace IPCore
             const auto* rawPts = static_cast<const Vec2f*>(pointsP->rawData());
             const size_t rawCount = pointsP->size();
 
-            if (isStampBrush)
+            if (brushEntry.has_value())
             {
                 // ── Stamp path: feed raw points directly into StampPath ────────
                 const size_t widthsCount = hasPerPointWidths ? widthP->size() : 0;
@@ -401,6 +415,11 @@ namespace IPCore
                         TwkPaint::BrushParams params;
                         params.radius = p.width;
                         params.opacity = p.color[3];
+                        params.spacingBias = spacingBias;
+                        params.spacingJitter = spacingJitter;
+                        params.opacityJitter = opacityJitter;
+                        params.radiusJitter = radiusJitter;
+                        params.rotationJitter = rotationJitter;
                         p.stampPlacer = std::make_unique<TwkPaint::StampPath>(params);
                         p.stampInstances.clear();
                     }
