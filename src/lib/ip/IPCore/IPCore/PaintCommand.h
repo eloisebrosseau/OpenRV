@@ -480,33 +480,20 @@ namespace IPCore
 
         struct PaintContext
         {
-            PaintContext()
-                : initialRender(0)
-                , tempRender1(0)
-                , tempRender2(0)
-                , cachedfbo(0)
-                , image(0)
-                , hasStencil(false)
-                , updateCache(true)
-                , cacheUpdated(false)
-                , lastCommand(0)
-                , commandExecuted(0)
-            {
-            }
-
-            const GLFBO* initialRender;
-            const GLFBO* tempRender1;
-            const GLFBO* tempRender2;
-            const GLFBO* cachedfbo;
-            const IPImage* image;
-            bool hasStencil;
-            TwkMath::Vec4f stencilBox;
-            bool updateCache;
-            bool cacheUpdated;
-            const Paint::Command* lastCommand;
+            const GLFBO* initialRender{nullptr};
+            const GLFBO* tempRender1{nullptr};
+            const GLFBO* tempRender2{nullptr};
+            const GLFBO* strokeRender{nullptr};
+            const GLFBO* cachedfbo{nullptr};
+            const IPImage* image{nullptr};
+            bool hasStencil{false};
+            TwkMath::Vec4f stencilBox{0.0f};
+            bool updateCache{true};
+            bool cacheUpdated{false};
+            const Paint::Command* lastCommand{nullptr};
             IPImage::PaintCommands commands;
-            GLState* glState;
-            size_t commandExecuted;
+            GLState* glState{nullptr};
+            size_t commandExecuted{0};
         };
 
         void renderPaintCommands(PaintContext&);

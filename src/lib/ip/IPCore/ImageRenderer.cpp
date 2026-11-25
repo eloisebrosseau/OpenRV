@@ -5047,6 +5047,7 @@ namespace IPCore
         // image's cached render.
         const GLFBO* tempfbo1 = m_imageFBOManager.newImageFBO(fbo, m_fullRenderSerialNumber, "")->fbo();
         const GLFBO* tempfbo2 = m_imageFBOManager.newImageFBO(fbo, m_fullRenderSerialNumber, "")->fbo();
+        const GLFBO* strokefbo = m_imageFBOManager.newImageFBO(fbo, m_fullRenderSerialNumber, "")->fbo();
 
         // Copy initial render to temp buffer
         if (root->commands.size() > 1)
@@ -5108,6 +5109,7 @@ namespace IPCore
         paintContext.initialRender = fbo;
         paintContext.tempRender1 = tempfbo1;
         paintContext.tempRender2 = tempfbo2;
+        paintContext.strokeRender = strokefbo;
         paintContext.cachedfbo = cachedFBO ? cachedFBO->fbo() : NULL;
         paintContext.image = root;
         paintContext.hasStencil = hasStencil;
