@@ -31,6 +31,7 @@ extern const char* ap_stamp_texture_frag;
 extern const char* EraseVertex_glsl;
 extern const char* EraseFrag_glsl;
 extern const char* SoftEraseFrag_glsl;
+extern const char* StampPaintFrag_glsl;
 extern const char* StampEraseFrag_glsl;
 extern const char* CloneVertex_glsl;
 extern const char* CloneFrag_glsl;
@@ -283,7 +284,7 @@ namespace TwkGLF
 
     const GLProgram* paintTessellateGLProgram() { return basicGLProgram(ReplaceColoredVertex_glsl, PaintColoredFrag_glsl); }
 
-    const GLProgram* texturePaintReplaceGLProgram()
+    const GLProgram* texturePaintStampGLProgram()
     {
         static const GLProgram* prog = nullptr;
         if (!prog)
@@ -302,5 +303,7 @@ namespace TwkGLF
         }
         return program;
     }
+
+    const GLProgram* texturePaintStrokeGLProgram() { return basicGLProgram(TextureVertex_glsl, StampPaintFrag_glsl); }
 
 } // namespace TwkGLF
