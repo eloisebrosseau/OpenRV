@@ -247,22 +247,31 @@ namespace IPCore
 
         namespace
         {
-            // primitiveData points into vertexData so moving the struct is safe, copying it would dangle.
             struct StampQuads
             {
                 std::vector<float> vertexData;
-                PrimitiveData primitiveData;
+                std::vector<unsigned int> indexData;
                 std::vector<VertexAttribute> vertexAttributes;
+                size_t vertexCount{0};
+                size_t triangleCount{0};
             };
 
-            // CPU-batches stamp instances into GL_QUADS vertex data.
-            // VBO layout matches PolyLine::build(): tightly packed, no index buffer.
-            // Each stamp is 4 vertices with UV in [0,1], rotated by angle, scaled by radius/squish.
-            // NOTE: can be replaced by VAO + glDrawArraysInstanced (GL 3.3) if OpenGL is upgraded.
-            // The CPU vertex expansion loop below would be eliminated entirely.
+            PrimitiveData makeStampPrimitives(StampQuads& quads)
+            {
+                return {quads.vertexData.data(), quads.indexData.data(), GL_TRIANGLES,
+                        quads.vertexCount,       quads.triangleCount,    quads.vertexData.size() * sizeof(float)};
+            }
+
+            // CPU-batches stamp instances into indexed GL_TRIANGLES data. Each stamp is 4 vertices with UV in [0,1], rotated by angle and
+            // scaled by radius/squish, drawn as 2 triangles through 6 indices.
+            //
+            // NOTE: with geometry instancing, available from OpenGL 3.3, each stamp would be one instance of a shared quad and this CPU
+            // expansion loop would go away and the corner math would move into the vertex shader.
             StampQuads buildStampQuads(const std::vector<StampInstance>& stamps)
             {
                 constexpr size_t kVerticesPerQuad = 4;
+                constexpr size_t kTrianglesPerQuad = 2;
+                constexpr size_t kIndicesPerTriangle = 3;
                 constexpr float kDegreesToRadians = 3.14159265f / 180.f;
 
                 const size_t stampCount = stamps.size();
@@ -295,12 +304,24 @@ namespace IPCore
                     {0.f, 1.f, -1.f, 1.f},
                 }};
 
+                // Splits the quad into two triangles (i.e. (0, 1, 2) and (0, 2, 3)) along the bottom-left to top-right diagonal.
+                constexpr std::array<unsigned int, kTrianglesPerQuad * kIndicesPerTriangle> kQuadIndices = {{0, 1, 2, 0, 2, 3}};
+                result.indexData.reserve(kQuadIndices.size() * stampCount);
+
                 for (size_t i = 0; i < stampCount; ++i)
                 {
                     const auto& stamp = stamps[i];
                     const float cosAngle = std::cos(stamp.angle * kDegreesToRadians);
                     const float sinAngle = std::sin(stamp.angle * kDegreesToRadians);
-                    size_t vertexIndex = kVerticesPerQuad * i;
+                    const auto firstVertex = static_cast<unsigned int>(kVerticesPerQuad * i);
+
+                    // Since stamp i owns vertices from firstVertex to firstVertex+3, its indices are offset by firstVertex.
+                    for (const unsigned int quadIndex : kQuadIndices)
+                    {
+                        result.indexData.push_back(firstVertex + quadIndex);
+                    }
+
+                    size_t vertexIndex = firstVertex;
                     for (const QuadCorner& corner : kQuadCorners)
                     {
                         result.vertexData[(2 * vertexIndex) + 0] = corner.u;
@@ -318,8 +339,8 @@ namespace IPCore
                     }
                 }
 
-                result.primitiveData = PrimitiveData(result.vertexData.data(), nullptr, GL_QUADS, vertexCount, stampCount,
-                                                     result.vertexData.size() * sizeof(float));
+                result.vertexCount = vertexCount;
+                result.triangleCount = kTrianglesPerQuad * stampCount;
                 result.vertexAttributes.emplace_back("in_TexCoord0", GL_FLOAT, 2, 0, 0);
                 result.vertexAttributes.emplace_back("in_Position", GL_FLOAT, 2, static_cast<int>(positionBlockOffset * sizeof(float)), 0);
                 result.vertexAttributes.emplace_back("in_Opacity", GL_FLOAT, 1, static_cast<int>(opacityBlockOffset * sizeof(float)), 0);
@@ -418,7 +439,7 @@ namespace IPCore
                 int originalTextureUnit = 2;
 
                 GLPipeline* stampPipeline =
-                    glState->useGLProgram(mode == EraseMode ? texturePaintEraseGLProgram() : texturePaintReplaceGLProgram());
+                    glState->useGLProgram(mode == EraseMode ? texturePaintEraseGLProgram() : texturePaintStampGLProgram());
                 stampPipeline->setProjection(context.projMatrix);
                 stampPipeline->setModelview(context.modelviewMatrix);
                 stampPipeline->setViewport(0, 0, w, h);
@@ -450,6 +471,7 @@ namespace IPCore
                 }
 
                 auto stampQuads = buildStampQuads(localPoly->stampInstances);
+                PrimitiveData stampPrimitives = makeStampPrimitives(stampQuads);
 
                 glEnable(GL_BLEND);
                 if (stampBlendMode == StampBlendMode::Additive)
@@ -460,9 +482,9 @@ namespace IPCore
                 {
                     glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
                 }
-                RenderPrimitives renderPrimitiveStampe(glState->activeGLProgram(), stampQuads.primitiveData, stampQuads.vertexAttributes,
-                                                       glState->vboList());
-                renderPrimitiveStampe.setupAndRender();
+                RenderPrimitives renderPrimitiveStamp(glState->activeGLProgram(), stampPrimitives, stampQuads.vertexAttributes,
+                                                      glState->vboList());
+                renderPrimitiveStamp.setupAndRender();
 
                 if (context.hasStencil)
                     glDisable(GL_SCISSOR_TEST);
