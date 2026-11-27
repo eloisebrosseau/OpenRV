@@ -431,6 +431,18 @@ namespace IPCore
                 }
                 context.strokeRender->unbindColorTexture();
             }
+
+            Color ghostAdjustedColor(const Command& command, const Color& color)
+            {
+                const auto* localCommand = dynamic_cast<const PaintIPNode::LocalCommand*>(&command);
+                if (localCommand == nullptr || !localCommand->ghostOn)
+                {
+                    return color;
+                }
+
+                const auto& ghost = localCommand->ghostColor;
+                return {ghost.x, ghost.y, ghost.z, color.w * ghost.w};
+            }
         } // namespace
 
         void PolyLine::execute(CommandContext& context) const
@@ -510,10 +522,7 @@ namespace IPCore
             //////////////////////////////////////////////////////////////////////////
 
             // determine effective stroke color (respects ghost mode)
-            Color pcolor;
-            const auto* localCommand = dynamic_cast<const PaintIPNode::LocalCommand*>(this);
-            bool isGhostOn = (localCommand != nullptr) ? localCommand->ghostOn : false;
-            pcolor = isGhostOn ? localCommand->ghostColor : color;
+            Color pcolor = ghostAdjustedColor(*this, color);
 
             if (isStamp)
             {
@@ -528,12 +537,12 @@ namespace IPCore
 
                 if (mode == EraseMode)
                 {
-                    compositeStroke(context, texturePaintEraseGLProgram(), GL_SRC_ALPHA, color[3], originalFBO);
+                    compositeStroke(context, texturePaintEraseGLProgram(), GL_SRC_ALPHA, pcolor[3], originalFBO);
                 }
                 else
                 {
                     // GL_ONE because the stroke texture is already premultiplied by pass 1.
-                    compositeStroke(context, texturePaintStrokeGLProgram(), GL_ONE, color[3], nullptr);
+                    compositeStroke(context, texturePaintStrokeGLProgram(), GL_ONE, pcolor[3], nullptr);
                 }
 
                 if (context.hasStencil)
@@ -912,9 +921,7 @@ namespace IPCore
         void Text::execute(CommandContext& context) const
         {
             // Determine effective text colour (ghost mode support)
-            const auto* localCommand = dynamic_cast<const PaintIPNode::LocalCommand*>(this);
-            const bool isGhostOn = (localCommand != nullptr) ? localCommand->ghostOn : false;
-            Color textColor = isGhostOn ? localCommand->ghostColor : color;
+            const Color textColor = ghostAdjustedColor(*this, color);
 
             // All text renders via QPainter → QImage → GL texture.
             // Pre-Qt sessions without fontFamily set use the system default font.
@@ -1370,12 +1377,8 @@ namespace IPCore
             const TwkGLF::GLProgram* prog = rectShapeGLProgram();
 
             // Determine effective colours (ghost mode support)
-            const auto* localCmd = dynamic_cast<const PaintIPNode::LocalCommand*>(this);
-            const bool isGhost = localCmd && localCmd->ghostOn;
-            const Color effectiveBorder = isGhost ? localCmd->ghostColor : borderColor;
-            const Color effectiveInner = isGhost ? Color(localCmd->ghostColor.x, localCmd->ghostColor.y, localCmd->ghostColor.z,
-                                                         innerColor.w > 0.0f ? localCmd->ghostColor.w : 0.0f)
-                                                 : innerColor;
+            const Color effectiveInner = ghostAdjustedColor(*this, innerColor);
+            const Color effectiveBorder = ghostAdjustedColor(*this, borderColor);
 
             // Bounding-box quad corners: BL BR TR TL
             float verts[8] = {min.x, min.y, max.x, min.y, max.x, max.y, min.x, max.y};
@@ -1418,12 +1421,8 @@ namespace IPCore
         {
             const TwkGLF::GLProgram* prog = ellipseShapeGLProgram();
 
-            const auto* localCmd = dynamic_cast<const PaintIPNode::LocalCommand*>(this);
-            const bool isGhost = localCmd && localCmd->ghostOn;
-            const Color effectiveBorder = isGhost ? localCmd->ghostColor : borderColor;
-            const Color effectiveInner = isGhost ? Color(localCmd->ghostColor.x, localCmd->ghostColor.y, localCmd->ghostColor.z,
-                                                         innerColor.w > 0.0f ? localCmd->ghostColor.w : 0.0f)
-                                                 : innerColor;
+            const Color effectiveBorder = ghostAdjustedColor(*this, borderColor);
+            const Color effectiveInner = ghostAdjustedColor(*this, innerColor);
 
             float verts[8] = {min.x, min.y, max.x, min.y, max.x, max.y, min.x, max.y};
 
@@ -1463,12 +1462,8 @@ namespace IPCore
         {
             const TwkGLF::GLProgram* prog = arrowShapeGLProgram();
 
-            const auto* localCmd = dynamic_cast<const PaintIPNode::LocalCommand*>(this);
-            const bool isGhost = localCmd && localCmd->ghostOn;
-            const Color effectiveBorder = isGhost ? localCmd->ghostColor : borderColor;
-            const Color effectiveInner = isGhost ? Color(localCmd->ghostColor.x, localCmd->ghostColor.y, localCmd->ghostColor.z,
-                                                         innerColor.w > 0.0f ? localCmd->ghostColor.w : 0.0f)
-                                                 : innerColor;
+            const Color effectiveInner = ghostAdjustedColor(*this, innerColor);
+            const Color effectiveBorder = ghostAdjustedColor(*this, borderColor);
 
             // Bounding box: expand by thickness + borderWidth on all sides
             const float margin = thickness * 3.0f + borderWidth; // 3× = head half-width (2.5×) + AA
@@ -1511,9 +1506,7 @@ namespace IPCore
         {
             const TwkGLF::GLProgram* prog = lineShapeGLProgram();
 
-            const auto* localCmd = dynamic_cast<const PaintIPNode::LocalCommand*>(this);
-            const bool isGhost = localCmd && localCmd->ghostOn;
-            const Color effectiveBorder = isGhost ? localCmd->ghostColor : borderColor;
+            const Color effectiveBorder = ghostAdjustedColor(*this, borderColor);
 
             // Margin must be at least as large as the SDF AA band (0.001) plus
             // the border half-width so that the capsule silhouette and its AA
