@@ -85,19 +85,21 @@ namespace IPCore
         class CommandContext
         {
         public:
-            explicit CommandContext(TwkMath::Mat44f pid, TwkMath::Mat44f m, const GLFBO* i, const GLFBO* t, const GLFBO* c, GLState*& g,
-                                    bool hasSten, TwkMath::Vec4f sten = TwkMath::Vec4f(0.0), int imgW = 0, int imgH = 0)
+            explicit CommandContext(const TwkMath::Mat44f& projection, const TwkMath::Mat44f& modelview, const GLFBO* initial,
+                                    const GLFBO* texture, const GLFBO* current, const GLFBO* stroke, GLState*& state, bool stencil,
+                                    const TwkMath::Vec4f& stencilRect = TwkMath::Vec4f(0.0), int width = 0, int height = 0)
+                : hasStencil(stencil)
+                , stencilBox(stencilRect)
+                , projMatrix(projection)
+                , modelviewMatrix(modelview)
+                , initialRender(initial)
+                , currentTexture(texture)
+                , currentRender(current)
+                , strokeRender(stroke)
+                , glState(state)
+                , imageWidth(width)
+                , imageHeight(height)
             {
-                hasStencil = hasSten;
-                stencilBox = sten;
-                projMatrix = pid;
-                modelviewMatrix = m;
-                initialRender = i;
-                currentTexture = t;
-                currentRender = c;
-                glState = g;
-                imageWidth = imgW;
-                imageHeight = imgH;
             }
 
             ~CommandContext() {}
@@ -110,6 +112,7 @@ namespace IPCore
             const GLFBO* initialRender;
             const GLFBO* currentTexture;
             const GLFBO* currentRender;
+            const GLFBO* strokeRender;
             GLState* glState;
             int imageWidth;
             int imageHeight;

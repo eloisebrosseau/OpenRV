@@ -5210,6 +5210,7 @@ namespace IPCore
 
         m_imageFBOManager.releaseImageFBO(tempfbo1);
         m_imageFBOManager.releaseImageFBO(tempfbo2);
+        m_imageFBOManager.releaseImageFBO(strokefbo);
 
         fbo->bind();
 

@@ -247,6 +247,13 @@ namespace IPCore
 
         namespace
         {
+            constexpr size_t kVerticesPerQuad = 4;
+            constexpr size_t kTrianglesPerQuad = 2;
+            constexpr size_t kIndicesPerTriangle = 3;
+
+            // Splits a quad into two triangles (i.e. (0, 1, 2) and (0, 2, 3)) along the bottom-left to top-right diagonal.
+            constexpr std::array<unsigned int, kTrianglesPerQuad * kIndicesPerTriangle> kQuadIndices = {{0, 1, 2, 0, 2, 3}};
+
             struct StampQuads
             {
                 std::vector<float> vertexData;
@@ -262,6 +269,26 @@ namespace IPCore
                         quads.vertexCount,       quads.triangleCount,    quads.vertexData.size() * sizeof(float)};
             }
 
+            void renderFrameQuad(GLState& glState, GLPipeline& pipeline, const GLFBO& target)
+            {
+                // The corners are already in clip space, so both matrices can be set to identity.
+                const Mat44f identity;
+                pipeline.setProjection(identity);
+                pipeline.setModelview(identity);
+                pipeline.setViewport(0, 0, static_cast<int>(target.width()), static_cast<int>(target.height()));
+
+                std::array positions{-1.f, -1.f, 1.f, -1.f, 1.f, 1.f, -1.f, 1.f};
+                auto indices = kQuadIndices;
+                PrimitiveData primitives(positions.data(), indices.data(), GL_TRIANGLES, kVerticesPerQuad, kTrianglesPerQuad,
+                                         positions.size() * sizeof(float));
+
+                std::vector<VertexAttribute> attributes;
+                attributes.emplace_back("in_Position", GL_FLOAT, 2, 0, 0);
+
+                RenderPrimitives renderPrimitives(glState.activeGLProgram(), primitives, attributes, glState.vboList());
+                renderPrimitives.setupAndRender();
+            }
+
             // CPU-batches stamp instances into indexed GL_TRIANGLES data. Each stamp is 4 vertices with UV in [0,1], rotated by angle and
             // scaled by radius/squish, drawn as 2 triangles through 6 indices.
             //
@@ -269,9 +296,6 @@ namespace IPCore
             // expansion loop would go away and the corner math would move into the vertex shader.
             StampQuads buildStampQuads(const std::vector<StampInstance>& stamps)
             {
-                constexpr size_t kVerticesPerQuad = 4;
-                constexpr size_t kTrianglesPerQuad = 2;
-                constexpr size_t kIndicesPerTriangle = 3;
                 constexpr float kDegreesToRadians = 3.14159265f / 180.f;
 
                 const size_t stampCount = stamps.size();
@@ -304,8 +328,6 @@ namespace IPCore
                     {0.f, 1.f, -1.f, 1.f},
                 }};
 
-                // Splits the quad into two triangles (i.e. (0, 1, 2) and (0, 2, 3)) along the bottom-left to top-right diagonal.
-                constexpr std::array<unsigned int, kTrianglesPerQuad * kIndicesPerTriangle> kQuadIndices = {{0, 1, 2, 0, 2, 3}};
                 result.indexData.reserve(kQuadIndices.size() * stampCount);
 
                 for (size_t i = 0; i < stampCount; ++i)
@@ -473,6 +495,13 @@ namespace IPCore
                 auto stampQuads = buildStampQuads(localPoly->stampInstances);
                 PrimitiveData stampPrimitives = makeStampPrimitives(stampQuads);
 
+                if (stampBlendMode == StampBlendMode::Normal)
+                {
+                    context.strokeRender->bind();
+                    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+                    glClear(GL_COLOR_BUFFER_BIT);
+                }
+
                 glEnable(GL_BLEND);
                 if (stampBlendMode == StampBlendMode::Additive)
                 {
@@ -485,6 +514,24 @@ namespace IPCore
                 RenderPrimitives renderPrimitiveStamp(glState->activeGLProgram(), stampPrimitives, stampQuads.vertexAttributes,
                                                       glState->vboList());
                 renderPrimitiveStamp.setupAndRender();
+
+                if (stampBlendMode == StampBlendMode::Normal)
+                {
+                    currentFBO->bind();
+                    GLPipeline* strokePipeline = glState->useGLProgram(texturePaintStrokeGLProgram());
+
+                    int strokeUnit = 0;
+                    float strokeOpacity = 1.0f;
+                    strokePipeline->setUniformInt("stroke", 1, &strokeUnit);
+                    strokePipeline->setUniformFloat("opacity", 1, &strokeOpacity);
+                    glActiveTexture(GL_TEXTURE0);
+                    context.strokeRender->bindColorTexture(0);
+
+                    glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+                    renderFrameQuad(glState, strokePipeline, currentFBO);
+
+                    context.strokeRender->unbindColorTexture();
+                }
 
                 if (context.hasStencil)
                     glDisable(GL_SCISSOR_TEST);
@@ -1558,8 +1605,8 @@ namespace IPCore
                 const Mat44f model = root->imageMatrix;
                 const Mat44f proj = root->projectionMatrix;
 
-                CommandContext commandContext(proj, model, fbo, textureFBO, currentFBO, context.glState, context.hasStencil,
-                                              context.stencilBox, root->width, root->height);
+                CommandContext commandContext(proj, model, fbo, textureFBO, currentFBO, context.strokeRender, context.glState,
+                                              context.hasStencil, context.stencilBox, root->width, root->height);
 
                 //
                 // to speed up the rendering, we execute all consecutive text

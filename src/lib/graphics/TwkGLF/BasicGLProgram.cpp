@@ -172,6 +172,11 @@ namespace TwkGLF
         glAttachShader(m_programId, f);
         TWK_GLDEBUG;
 
+        // Legacy contexts (i.e. GL 2.1) draw nothing unless attribute 0 is enabled, and the linker may otherwise give 0 to an unsupplied
+        // attribute.
+        glBindAttribLocation(m_programId, 0, "in_Position");
+        TWK_GLDEBUG;
+
         glLinkProgram(m_programId);
 
         status = GL_TRUE;
