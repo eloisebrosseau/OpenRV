@@ -368,6 +368,69 @@ namespace IPCore
                 result.vertexAttributes.emplace_back("in_Opacity", GL_FLOAT, 1, static_cast<int>(opacityBlockOffset * sizeof(float)), 0);
                 return result;
             }
+
+            void drawStampsToStrokeTexture(const CommandContext& context, Color color, const std::string& tipTexture, float hardness,
+                                           const std::vector<StampInstance>& stamps)
+            {
+                const unsigned int textureId = BrushTextureManager::instance().getTexture(tipTexture);
+
+                GLPipeline* pipeline = context.glState->useGLProgram(texturePaintStampGLProgram());
+                pipeline->setProjection(context.projMatrix);
+                pipeline->setModelview(context.modelviewMatrix);
+                pipeline->setViewport(0, 0, static_cast<int>(context.strokeRender->width()),
+                                      static_cast<int>(context.strokeRender->height()));
+                pipeline->setUniformFloat("uniformColor", 3, &color[0]);
+                pipeline->setUniformFloat("hardness", 1, &hardness);
+
+                int tipUnit = 0;
+                pipeline->setUniformInt("brushTip", 1, &tipUnit);
+                glActiveTexture(GL_TEXTURE0 + tipUnit);
+                glBindTexture(GL_TEXTURE_2D, textureId);
+
+                context.strokeRender->bind();
+                glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+                glClear(GL_COLOR_BUFFER_BIT);
+                glEnable(GL_BLEND);
+                glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+
+                StampQuads quads = buildStampQuads(stamps);
+                PrimitiveData primitives = makeStampPrimitives(quads);
+                RenderPrimitives renderPrimitives(context.glState->activeGLProgram(), primitives, quads.vertexAttributes,
+                                                  context.glState->vboList());
+                renderPrimitives.setupAndRender();
+            }
+
+            void compositeStroke(const CommandContext& context, const GLProgram* program, GLenum sourceRgbFactor, float opacity,
+                                 const GLFBO* original)
+            {
+                GLPipeline* pipeline = context.glState->useGLProgram(program);
+                context.currentRender->bind();
+
+                int strokeUnit = 0;
+                pipeline->setUniformInt("stroke", 1, &strokeUnit);
+                pipeline->setUniformFloat("opacity", 1, &opacity);
+                glActiveTexture(GL_TEXTURE0);
+                context.strokeRender->bindColorTexture(0);
+
+                if (original != nullptr)
+                {
+                    int originalUnit = 1;
+                    pipeline->setUniformInt("original", 1, &originalUnit);
+                    glActiveTexture(GL_TEXTURE0 + originalUnit);
+                    original->bindColorTexture(0);
+                }
+
+                glEnable(GL_BLEND);
+                glBlendFuncSeparate(sourceRgbFactor, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+                renderFrameQuad(*context.glState, *pipeline, *context.currentRender);
+
+                if (original != nullptr)
+                {
+                    original->unbindColorTexture();
+                    glActiveTexture(GL_TEXTURE0);
+                }
+                context.strokeRender->unbindColorTexture();
+            }
         } // namespace
 
         void PolyLine::execute(CommandContext& context) const
@@ -454,37 +517,6 @@ namespace IPCore
 
             if (isStamp)
             {
-                // Brush properties come from the brush catalogue and the stroke's own overrides (see PaintIPNode::compilePenComponent) —
-                // resolve the tip texture at render time since that's the only place with a GL context.
-                const unsigned int textureId = BrushTextureManager::instance().getTexture(tipTexture);
-
-                int originalTextureUnit = 2;
-
-                GLPipeline* stampPipeline =
-                    glState->useGLProgram(mode == EraseMode ? texturePaintEraseGLProgram() : texturePaintStampGLProgram());
-                stampPipeline->setProjection(context.projMatrix);
-                stampPipeline->setModelview(context.modelviewMatrix);
-                stampPipeline->setViewport(0, 0, w, h);
-
-                if (mode == EraseMode)
-                {
-                    stampPipeline->setUniformInt("original", 1, &originalTextureUnit);
-                    glActiveTexture(GL_TEXTURE0 + originalTextureUnit);
-                    originalFBO->bindColorTexture(0);
-                }
-                else
-                {
-                    stampPipeline->setUniformFloat("uniformColor", 3, &(pcolor[0]));
-                }
-
-                int tipUnit = 1;
-                stampPipeline->setUniformInt("brushTip", 1, &tipUnit);
-                glActiveTexture(GL_TEXTURE0 + 1);
-                glBindTexture(GL_TEXTURE_2D, textureId);
-
-                float stampHardness = hardness;
-                stampPipeline->setUniformFloat("hardness", 1, &stampHardness);
-
                 if (context.hasStencil)
                 {
                     glEnable(GL_SCISSOR_TEST);
@@ -492,54 +524,21 @@ namespace IPCore
                               context.stencilBox[3] - context.stencilBox[1]);
                 }
 
-                auto stampQuads = buildStampQuads(localPoly->stampInstances);
-                PrimitiveData stampPrimitives = makeStampPrimitives(stampQuads);
-
-                if (stampBlendMode == StampBlendMode::Normal)
-                {
-                    context.strokeRender->bind();
-                    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-                    glClear(GL_COLOR_BUFFER_BIT);
-                }
-
-                glEnable(GL_BLEND);
-                if (stampBlendMode == StampBlendMode::Additive)
-                {
-                    glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE, GL_ONE, GL_ONE);
-                }
-                else
-                {
-                    glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-                }
-                RenderPrimitives renderPrimitiveStamp(glState->activeGLProgram(), stampPrimitives, stampQuads.vertexAttributes,
-                                                      glState->vboList());
-                renderPrimitiveStamp.setupAndRender();
-
-                if (stampBlendMode == StampBlendMode::Normal)
-                {
-                    currentFBO->bind();
-                    GLPipeline* strokePipeline = glState->useGLProgram(texturePaintStrokeGLProgram());
-
-                    int strokeUnit = 0;
-                    float strokeOpacity = color[3];
-                    strokePipeline->setUniformInt("stroke", 1, &strokeUnit);
-                    strokePipeline->setUniformFloat("opacity", 1, &strokeOpacity);
-                    glActiveTexture(GL_TEXTURE0);
-                    context.strokeRender->bindColorTexture(0);
-
-                    glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-                    renderFrameQuad(glState, strokePipeline, currentFBO);
-
-                    context.strokeRender->unbindColorTexture();
-                }
-
-                if (context.hasStencil)
-                    glDisable(GL_SCISSOR_TEST);
+                drawStampsToStrokeTexture(context, pcolor, tipTexture, hardness, localPoly->stampInstances);
 
                 if (mode == EraseMode)
                 {
-                    glActiveTexture(GL_TEXTURE0 + originalTextureUnit);
-                    originalFBO->unbindColorTexture();
+                    compositeStroke(context, texturePaintEraseGLProgram(), GL_SRC_ALPHA, color[3], originalFBO);
+                }
+                else
+                {
+                    // GL_ONE because the stroke texture is already premultiplied by pass 1.
+                    compositeStroke(context, texturePaintStrokeGLProgram(), GL_ONE, color[3], nullptr);
+                }
+
+                if (context.hasStencil)
+                {
+                    glDisable(GL_SCISSOR_TEST);
                 }
             }
             else

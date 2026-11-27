@@ -298,16 +298,7 @@ namespace TwkGLF
         return prog;
     }
 
-    const GLProgram* texturePaintEraseGLProgram()
-    {
-        static const GLProgram* program = nullptr;
-        if (program == nullptr)
-        {
-            program = BasicGLProgram::select(std::string(ap_compat_gl21) + ap_stamp_texture_vert,
-                                             std::string(ap_compat_gl21) + StampEraseFrag_glsl);
-        }
-        return program;
-    }
+    const GLProgram* texturePaintEraseGLProgram() { return basicGLProgram(TextureVertex_glsl, StampEraseFrag_glsl); }
 
     const GLProgram* texturePaintStrokeGLProgram() { return basicGLProgram(TextureVertex_glsl, StampPaintFrag_glsl); }
 
