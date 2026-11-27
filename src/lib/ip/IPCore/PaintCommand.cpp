@@ -521,7 +521,7 @@ namespace IPCore
                     GLPipeline* strokePipeline = glState->useGLProgram(texturePaintStrokeGLProgram());
 
                     int strokeUnit = 0;
-                    float strokeOpacity = 1.0f;
+                    float strokeOpacity = color[3];
                     strokePipeline->setUniformInt("stroke", 1, &strokeUnit);
                     strokePipeline->setUniformFloat("opacity", 1, &strokeOpacity);
                     glActiveTexture(GL_TEXTURE0);

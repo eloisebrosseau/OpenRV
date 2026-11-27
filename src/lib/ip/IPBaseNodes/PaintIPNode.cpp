@@ -345,6 +345,7 @@ namespace IPCore
         const IntProperty* rotateToStrokeP = c->property<IntProperty>("rotateToStroke");
         const FloatProperty* angleP = c->property<FloatProperty>("angle");
         const FloatProperty* squishP = c->property<FloatProperty>("squish");
+        const FloatProperty* flowP = c->property<FloatProperty>("flow");
         const IntProperty* blendModeP = c->property<IntProperty>("blendMode");
 
         const float width = widthP && widthP->size() ? widthP->front() : 0.01f;
@@ -377,6 +378,7 @@ namespace IPCore
             rotateToStrokeP != nullptr && rotateToStrokeP->size() > 0 ? rotateToStrokeP->front() != 0 : defaults.rotateToStroke;
         const float angle = angleP != nullptr && angleP->size() > 0 ? angleP->front() : defaults.angle;
         const float squish = squishP != nullptr && squishP->size() > 0 ? squishP->front() : defaults.squish;
+        const float flow = flowP != nullptr && flowP->size() > 0 ? flowP->front() : defaults.flow;
         const auto blendMode = (blendModeP != nullptr && blendModeP->size() != 0)
                                    ? static_cast<Paint::PolyLine::StampBlendMode>(blendModeP->front())
                                    : Paint::PolyLine::StampBlendMode::Normal;
@@ -429,7 +431,7 @@ namespace IPCore
                     {
                         TwkPaint::BrushParams params;
                         params.radius = p.width;
-                        params.opacity = p.color[3];
+                        params.opacity = flow;
                         params.spacingBias = spacingBias;
                         params.spacingJitter = spacingJitter;
                         params.opacityJitter = opacityJitter;
@@ -453,7 +455,7 @@ namespace IPCore
 
                     if (rawCount == 1)
                     {
-                        p.stampInstances.push_back({point, w, p.color[3], angle, squish});
+                        p.stampInstances.push_back({point, w, flow, angle, squish});
                     }
                 }
 
